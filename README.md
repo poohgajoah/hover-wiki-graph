@@ -50,6 +50,29 @@ All 18,299 HoVer supporting-document titles are nodes in both graphs.
 
 The analysis classifiers are regex heuristics; treat their percentages as approximate.
 
+## Fact-verification pipeline
+
+1. **Candidate documents (Colab, GPU)** — [colab/hover_retrieval.ipynb](colab/hover_retrieval.ipynb):
+   spaCy `en_core_web_trf` entities + claim n-grams → title resolution (exact → loose → title
+   embedding) → best-first search over the intro-link graph. Writes `results/<split>_B20_….jsonl`.
+2. **Evidence sentences (local)** — `retrieval/sentence_selector.py`: cross-encoder fine-tuned on
+   HoVer train (gold sentences vs. sentences of retrieved non-gold docs); keeps the top 2 sentences
+   per document and N overall.
+3. **Verification (local)** — `retrieval/verifier.py`: official HoVer recipe (bert-base-uncased,
+   max length 200, claim ≤ 60 tokens, lr 3e-5, batch 4 × 2, 3000 steps) trained on the evidence
+   selected for the train split.
+
+`retrieval/build_store.py` builds `data/store/wiki.db` (intro sentences with HoVer sentence ids).
+Put the Colab outputs in `data/results/`, then:
+```
+cd retrieval
+uv run python sentence_selector.py train  --retrieval ../data/results/train_B20_M5_d3_out_floor0.7.jsonl
+uv run python sentence_selector.py select --retrieval ../data/results/train_B20_M5_d3_out_floor0.7.jsonl
+uv run python sentence_selector.py select --retrieval ../data/results/dev_B20_M5_d3_out_floor0.7.jsonl
+uv run python verifier.py train   --evidence ../data/results/train_B20_M5_d3_out_floor0.7.evidence_k2_n5.jsonl
+uv run python verifier.py predict --evidence ../data/results/dev_B20_M5_d3_out_floor0.7.evidence_k2_n5.jsonl
+```
+
 ## Data
 
 HoVer data: <https://hover-nlp.github.io/> (CC BY-SA 4.0). Wikipedia content is CC BY-SA.
