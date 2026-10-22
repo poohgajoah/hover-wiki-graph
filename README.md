@@ -51,6 +51,71 @@ HoVer 근거 문서 제목 18,299개는 두 그래프 모두에 노드로 들어
 
 ## 사실 검증 파이프라인
 
+### claim 하나가 판정되기까지
+
+```mermaid
+flowchart TD
+    subgraph PREP["데이터 준비 (완료)"]
+        WIKI["2017-10-01 위키피디아<br/>HotpotQA 첫 단락 덤프"] --> TITLES["제목 리스트<br/>523만 개"]
+        WIKI --> GRAPH["첫 단락 링크 그래프<br/>고유 링크 2,268만 개"]
+    end
+
+    CLAIM(["claim"])
+
+    subgraph COLAB["1. 후보 문서 — Colab GPU"]
+        NER["spaCy en_core_web_trf 개체 추출<br/>DATE·숫자류 라벨 제외"]
+        NGRAM["claim n-gram을 제목 사전과 직접 매칭<br/>NER이 놓친 개체 보완"]
+        CHECK{"제목 리스트에서 확인"}
+        EMB["제목 임베딩 검색<br/>가장 비슷한 제목"]
+        DROP["버림"]
+        SEED["시작 후보 문서"]
+        BFS["best-first 탐색<br/>점수 = cos(링크 문서 첫 문단, claim + 직전 문서 첫 문단)<br/>큐 우선순위 = 경로 평균 점수<br/>최대 깊이 3 · 방문 문서 제외 · 이웃 상위 M=5개"]
+        DOCS["후보 문서 B=20개"]
+    end
+
+    subgraph LOCAL["2·3. 근거 문장과 검증 — 로컬"]
+        CE["cross-encoder로 claim–문장 점수"]
+        EVID["근거 문장<br/>문서마다 상위 2문장, 전체 N=5문장"]
+        VER["HoVer 공식 검증 모델<br/>bert-base-uncased"]
+    end
+
+    LABEL(["SUPPORTED / NOT_SUPPORTED"])
+
+    CLAIM --> NER & NGRAM
+    TITLES -.-> CHECK
+    NER --> CHECK
+    NGRAM --> CHECK
+    CHECK -->|"정확 일치"| SEED
+    CHECK -->|"소문자·괄호 제거 일치"| SEED
+    CHECK -->|"없음"| EMB
+    EMB -->|"유사도 ≥ 0.70"| SEED
+    EMB -->|"유사도 0.70 미만"| DROP
+    SEED --> BFS
+    GRAPH -.-> BFS
+    BFS -->|"예산 B개 도달 또는 큐가 비면 종료"| DOCS
+    DOCS --> CE --> EVID --> VER --> LABEL
+```
+
+### train과 dev의 쓰임
+
+```mermaid
+flowchart LR
+    subgraph TRAIN["train (18,171개) — 학습용"]
+        TR["Colab 후보 문서<br/>train_….jsonl"] --> CET["cross-encoder 학습<br/>양성: 정답 근거 문장<br/>음성: 정답 문서의 다른 문장 + 검색된 오답 문서의 문장"]
+        CET --> SELT["train 근거 문장 선택"]
+        TR --> SELT
+        SELT --> VT["검증 모델 학습<br/>3,000스텝"]
+    end
+
+    subgraph DEV["dev (4,000개) — 예측·평가용"]
+        DR["Colab 후보 문서<br/>dev_….jsonl"] --> SELD["dev 근거 문장 선택"]
+        SELD --> PRED["dev 예측<br/>.pred.jsonl"]
+    end
+
+    CET -->|"학습된 cross-encoder"| SELD
+    VT -->|"학습된 검증 모델"| PRED
+```
+
 1. **후보 문서 (Colab, GPU)** — [colab/hover_retrieval.ipynb](colab/hover_retrieval.ipynb):
    spaCy `en_core_web_trf` 개체 + claim n-gram → 제목 연결(정확 일치 → 소문자·괄호 제거 일치 →
    제목 임베딩 검색) → 첫 단락 링크 그래프 best-first 탐색. 결과는 `results/<split>_B20_….jsonl`.
