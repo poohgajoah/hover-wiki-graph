@@ -31,7 +31,8 @@ TRF_WHEEL = "https://github.com/explosion/spacy-models/releases/download/en_core
 # %%
 from google.colab import drive
 drive.mount("/content/drive")
-!pip -q install "spacy[cuda12x]>=3.8,<3.9" {TRF_WHEEL}
+# Colab already ships spaCy 3.8 and cupy; the [cuda12x] extra pins a conflicting cupy, so only add the model
+!pip -q install {TRF_WHEEL}
 !apt-get -qq install -y aria2 > /dev/null
 
 # %%
@@ -187,7 +188,7 @@ print(f"{len(exact_ids):,} exact keys, {len(norm_ids):,} loose keys")
 # ---- claims, NER and n-gram mentions ----
 import spacy
 
-spacy.prefer_gpu()
+print("spaCy", spacy.__version__, "on GPU" if spacy.prefer_gpu() else "on CPU (cupy not available)")
 nlp = spacy.load("en_core_web_trf", disable=["parser", "lemmatizer"])
 DROP = {"DATE", "TIME", "PERCENT", "MONEY", "QUANTITY", "ORDINAL", "CARDINAL"}
 MAX_N = 8
