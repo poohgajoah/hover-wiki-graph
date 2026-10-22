@@ -4,7 +4,8 @@ Wikipedia title link graphs at the 2017-10-01 snapshot used by
 [HoVer](https://hover-nlp.github.io/) (and HotpotQA), plus analysis scripts for
 HoVer claims.
 
-Requires Node.js (≥ 18), `curl`, `bzip2`, `tar`. No npm dependencies.
+Requires Python 3.11–3.12 managed by [uv](https://docs.astral.sh/uv/) (`uv sync`), plus `curl`, `bzip2`, `tar`.
+Run every script with `uv run python ...`.
 
 ## Graphs
 
@@ -33,16 +34,19 @@ All 18,299 HoVer supporting-document titles are nodes in both graphs.
 `scripts/`
 - `fetch_ranges.sh` — resumable parallel ranged download streamed to stdout
 - `download_abstracts.sh` — HotpotQA abstracts dump download
-- `extract_pages.js` — namespace-0 page/redirect table from a pages-articles XML dump
-- `build_abstract_graph.js`, `build_full_graph.js` — graph builders
-- `validate_graph.js` — HoVer supporting-document coverage report
-- `title_utils.js` — title normalisation, HTML-entity handling, redirect resolution
+- `extract_pages.py` — namespace-0 page/redirect table from a pages-articles XML dump
+- `build_abstract_graph.py`, `build_full_graph.py` — graph builders
+- `validate_graph.py` — HoVer supporting-document coverage report
+- `title_utils.py` — title normalisation, HTML-entity handling, redirect resolution
+- `make_colab_bundle.py` — packs nodes, links and HoVer json into `data/colab_bundle/` for Colab
+- `jscompat.py` — JavaScript-compatible number/ordering/JSON formatting (the scripts were ported
+  from Node.js and reproduce its output byte for byte)
 
 `scripts/analysis/` (input: directory with `hover_{train,dev,test}_release_v1.1.json`)
-- `dataset_stats.js <data_dir>` — label/hop distribution, supporting-fact and title statistics
-- `claim_mutations.js <data_dir>` — how NOT_SUPPORTED claims differ from SUPPORTED siblings
-- `claim_logic.js <data_dir> <split> [ex]` — rule-based logical-structure classes of claims
-- `hop2_structure.js <data_dir> <split> [ex]` — finer structure classes for 2-hop claims
+- `dataset_stats.py <data_dir>` — label/hop distribution, supporting-fact and title statistics
+- `claim_mutations.py <data_dir>` — how NOT_SUPPORTED claims differ from SUPPORTED siblings
+- `claim_logic.py <data_dir> <split> [ex]` — rule-based logical-structure classes of claims
+- `hop2_structure.py <data_dir> <split> [ex]` — finer structure classes for 2-hop claims
 
 The analysis classifiers are regex heuristics; treat their percentages as approximate.
 
