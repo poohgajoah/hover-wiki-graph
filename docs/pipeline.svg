@@ -1,180 +1,113 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="800" viewBox="0 0 1400 800" font-family="'Malgun Gothic','Apple SD Gothic Neo','Noto Sans KR',sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="560" viewBox="0 0 1600 560" font-family="'Malgun Gothic','Apple SD Gothic Neo','Noto Sans KR',sans-serif">
   <defs>
-    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
-    </marker>
-    <marker id="arrowBlue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
-      <path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/>
-    </marker>
-    <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%">
-      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.08"/>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#0f172a" flood-opacity="0.10"/>
     </filter>
+    <marker id="chev" viewBox="0 0 12 12" refX="6" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+      <path d="M2,1 L9,6 L2,11" fill="none" stroke="#94a3b8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
   </defs>
-
-  <rect width="1400" height="800" fill="#ffffff"/>
+  <rect width="1600" height="560" fill="#ffffff"/>
 
   <!-- title -->
-  <text x="40" y="52" font-size="28" font-weight="700" fill="#0f172a">HoVer 사실 검증 파이프라인</text>
-  <text x="40" y="80" font-size="15" fill="#64748b">claim 하나가 참·거짓으로 판정되기까지 · 예시는 dev claim의 실제 실행 결과</text>
+  <text x="800" y="58" font-size="30" font-weight="700" fill="#0f172a" text-anchor="middle">HoVer 사실 검증 파이프라인</text>
 
-  <!-- claim bar -->
-  <rect x="40" y="100" width="1320" height="56" rx="12" fill="#f8fafc" stroke="#cbd5e1"/>
-  <rect x="56" y="114" width="64" height="28" rx="14" fill="#0f172a"/>
-  <text x="88" y="133" font-size="14" font-weight="700" fill="#ffffff" text-anchor="middle">claim</text>
-  <text x="136" y="134" font-size="18" fill="#0f172a">“Carrie Coon plays Margo Dunne in a 2014 film set in Missouri.”</text>
-  <text x="1344" y="134" font-size="14" fill="#b45309" text-anchor="end">영화 제목(Gone Girl)은 claim에 없음</text>
-
-  <!-- ===== panel 1 ===== -->
-  <g filter="url(#shadow)">
-    <rect x="40" y="180" width="580" height="560" rx="16" fill="#eff6ff" stroke="#bfdbfe"/>
-  </g>
-  <rect x="40" y="180" width="580" height="48" rx="16" fill="#2563eb"/>
-  <rect x="40" y="208" width="580" height="20" fill="#2563eb"/>
-  <text x="64" y="211" font-size="19" font-weight="700" fill="#ffffff">① 후보 문서 찾기</text>
-  <text x="596" y="211" font-size="13" fill="#dbeafe" text-anchor="end">위키 523만 문서 → 20개</text>
-
-  <!-- step 1.1 -->
-  <circle cx="74" cy="262" r="13" fill="#2563eb"/>
-  <text x="74" y="267" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">1</text>
-  <text x="96" y="268" font-size="16" font-weight="700" fill="#0f172a">개체 찾기</text>
-  <text x="96" y="290" font-size="13" fill="#475569">spaCy 개체 추출 + claim n-gram을 제목 사전과 매칭 (날짜·숫자 제외)</text>
-  <g font-size="13">
-    <rect x="96" y="302" width="104" height="26" rx="13" fill="#fff" stroke="#93c5fd"/>
-    <text x="148" y="320" text-anchor="middle" fill="#1e3a8a">Carrie Coon</text>
-    <rect x="208" y="302" width="88" height="26" rx="13" fill="#fff" stroke="#93c5fd"/>
-    <text x="252" y="320" text-anchor="middle" fill="#1e3a8a">Missouri</text>
-    <rect x="304" y="302" width="112" height="26" rx="13" fill="#fff" stroke="#93c5fd"/>
-    <text x="360" y="320" text-anchor="middle" fill="#1e3a8a">Margo Dunne</text>
+  <!-- stage bands -->
+  <g font-size="16" font-weight="700">
+    <rect x="300" y="92" width="730" height="36" rx="18" fill="#dbeafe"/>
+    <text x="665" y="116" text-anchor="middle" fill="#1d4ed8">① 후보 문서 찾기</text>
+    <rect x="1080" y="92" width="210" height="36" rx="18" fill="#d1fae5"/>
+    <text x="1185" y="116" text-anchor="middle" fill="#047857">② 근거 문장 고르기</text>
+    <rect x="1340" y="92" width="210" height="36" rx="18" fill="#ede9fe"/>
+    <text x="1445" y="116" text-anchor="middle" fill="#6d28d9">③ 판정</text>
   </g>
 
-  <!-- step 1.2 -->
-  <circle cx="74" cy="364" r="13" fill="#2563eb"/>
-  <text x="74" y="369" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">2</text>
-  <text x="96" y="370" font-size="16" font-weight="700" fill="#0f172a">위키 문서 제목에 연결 → 시작 문서</text>
-  <text x="96" y="392" font-size="13" fill="#475569">정확 일치 → 소문자·괄호 제거 일치 → 제목 임베딩 검색 (유사도 0.7 이상)</text>
-  <g font-size="13">
-    <rect x="96" y="404" width="150" height="26" rx="6" fill="#dbeafe"/>
-    <text x="171" y="422" text-anchor="middle" fill="#1e3a8a">Carrie Coon · 정확</text>
-    <rect x="254" y="404" width="132" height="26" rx="6" fill="#dbeafe"/>
-    <text x="320" y="422" text-anchor="middle" fill="#1e3a8a">Missouri · 정확</text>
-    <rect x="394" y="404" width="200" height="26" rx="6" fill="#dbeafe"/>
-    <text x="494" y="422" text-anchor="middle" fill="#1e3a8a">Margo Dunne → Dunne · 0.76</text>
+  <!-- cards: x = 50, 310, 570, 820(+?) ... width 210, gap 50 -->
+  <!-- card 1: claim -->
+  <g filter="url(#shadow)"><rect x="50" y="150" width="210" height="250" rx="20" fill="#ffffff" stroke="#e2e8f0"/></g>
+  <circle cx="155" cy="222" r="42" fill="#f1f5f9"/>
+  <path d="M130,204 h50 a8,8 0 0 1 8,8 v24 a8,8 0 0 1 -8,8 h-28 l-12,10 v-10 h-10 a8,8 0 0 1 -8,-8 v-24 a8,8 0 0 1 8,-8 z" fill="#334155"/>
+  <rect x="138" y="215" width="34" height="4" rx="2" fill="#ffffff"/>
+  <rect x="138" y="225" width="24" height="4" rx="2" fill="#ffffff"/>
+  <text x="155" y="300" font-size="20" font-weight="700" fill="#0f172a" text-anchor="middle">claim</text>
+  <text x="155" y="330" font-size="14" fill="#64748b" text-anchor="middle">참·거짓을 판정할</text>
+  <text x="155" y="350" font-size="14" fill="#64748b" text-anchor="middle">주장 문장</text>
+
+  <!-- card 2: entity linking -->
+  <g filter="url(#shadow)"><rect x="310" y="150" width="210" height="250" rx="20" fill="#ffffff" stroke="#bfdbfe"/></g>
+  <circle cx="415" cy="222" r="42" fill="#dbeafe"/>
+  <circle cx="408" cy="215" r="15" fill="none" stroke="#2563eb" stroke-width="5"/>
+  <line x1="419" y1="226" x2="433" y2="240" stroke="#2563eb" stroke-width="6" stroke-linecap="round"/>
+  <text x="415" y="300" font-size="20" font-weight="700" fill="#0f172a" text-anchor="middle">시작 문서 찾기</text>
+  <text x="415" y="330" font-size="14" fill="#64748b" text-anchor="middle">claim 속 개체명을</text>
+  <text x="415" y="350" font-size="14" fill="#64748b" text-anchor="middle">위키 문서 제목에 연결</text>
+
+  <!-- card 3: graph search -->
+  <g filter="url(#shadow)"><rect x="570" y="150" width="210" height="250" rx="20" fill="#ffffff" stroke="#bfdbfe"/></g>
+  <circle cx="675" cy="222" r="42" fill="#dbeafe"/>
+  <g stroke="#2563eb" stroke-width="3">
+    <line x1="656" y1="236" x2="676" y2="206"/>
+    <line x1="676" y1="206" x2="698" y2="230"/>
+    <line x1="656" y1="236" x2="698" y2="230"/>
+  </g>
+  <circle cx="656" cy="236" r="8" fill="#2563eb"/>
+  <circle cx="676" cy="206" r="8" fill="#2563eb"/>
+  <circle cx="698" cy="230" r="9" fill="#f59e0b"/>
+  <text x="675" y="300" font-size="20" font-weight="700" fill="#0f172a" text-anchor="middle">링크 따라 탐색</text>
+  <text x="675" y="330" font-size="14" fill="#64748b" text-anchor="middle">위키 링크를 따라가며</text>
+  <text x="675" y="350" font-size="14" fill="#64748b" text-anchor="middle">이름이 숨은 문서까지</text>
+
+  <!-- card 4: candidate docs -->
+  <g filter="url(#shadow)"><rect x="830" y="150" width="210" height="250" rx="20" fill="#ffffff" stroke="#bfdbfe"/></g>
+  <circle cx="935" cy="222" r="42" fill="#dbeafe"/>
+  <rect x="914" y="200" width="34" height="42" rx="4" fill="#93c5fd"/>
+  <rect x="922" y="206" width="34" height="42" rx="4" fill="#2563eb"/>
+  <rect x="928" y="216" width="22" height="3" rx="1.5" fill="#ffffff"/>
+  <rect x="928" y="224" width="22" height="3" rx="1.5" fill="#ffffff"/>
+  <rect x="928" y="232" width="14" height="3" rx="1.5" fill="#ffffff"/>
+  <text x="935" y="300" font-size="20" font-weight="700" fill="#0f172a" text-anchor="middle">후보 문서 20개</text>
+  <text x="935" y="330" font-size="14" fill="#64748b" text-anchor="middle">claim과 관련이 높은</text>
+  <text x="935" y="350" font-size="14" fill="#64748b" text-anchor="middle">순서로 20개</text>
+
+  <!-- card 5: evidence sentences -->
+  <g filter="url(#shadow)"><rect x="1080" y="150" width="210" height="250" rx="20" fill="#ffffff" stroke="#a7f3d0"/></g>
+  <circle cx="1185" cy="222" r="42" fill="#d1fae5"/>
+  <rect x="1160" y="202" width="50" height="7" rx="3.5" fill="#cbd5e1"/>
+  <rect x="1160" y="215" width="50" height="7" rx="3.5" fill="#059669"/>
+  <rect x="1160" y="228" width="50" height="7" rx="3.5" fill="#cbd5e1"/>
+  <rect x="1160" y="241" width="34" height="7" rx="3.5" fill="#059669"/>
+  <text x="1185" y="300" font-size="20" font-weight="700" fill="#0f172a" text-anchor="middle">근거 문장</text>
+  <text x="1185" y="330" font-size="14" fill="#64748b" text-anchor="middle">근거일 확률이 높은</text>
+  <text x="1185" y="350" font-size="14" fill="#64748b" text-anchor="middle">문장만 (최대 5개)</text>
+
+  <!-- card 6: verdict -->
+  <g filter="url(#shadow)"><rect x="1340" y="150" width="210" height="250" rx="20" fill="#ffffff" stroke="#ddd6fe"/></g>
+  <circle cx="1445" cy="222" r="42" fill="#ede9fe"/>
+  <path d="M1425,224 l13,13 l26,-28" fill="none" stroke="#7c3aed" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="1445" y="300" font-size="20" font-weight="700" fill="#0f172a" text-anchor="middle">판정</text>
+  <rect x="1372" y="318" width="146" height="26" rx="13" fill="#dcfce7"/>
+  <text x="1445" y="336" font-size="13" font-weight="700" fill="#15803d" text-anchor="middle">SUPPORTED</text>
+  <rect x="1372" y="350" width="146" height="26" rx="13" fill="#fee2e2"/>
+  <text x="1445" y="368" font-size="13" font-weight="700" fill="#b91c1c" text-anchor="middle">NOT_SUPPORTED</text>
+
+  <!-- arrows -->
+  <g stroke="#94a3b8" stroke-width="3" stroke-linecap="round">
+    <line x1="268" y1="275" x2="300" y2="275" marker-end="url(#chev)"/>
+    <line x1="528" y1="275" x2="560" y2="275" marker-end="url(#chev)"/>
+    <line x1="788" y1="275" x2="820" y2="275" marker-end="url(#chev)"/>
+    <line x1="1048" y1="275" x2="1070" y2="275" marker-end="url(#chev)"/>
+    <line x1="1298" y1="275" x2="1330" y2="275" marker-end="url(#chev)"/>
   </g>
 
-  <!-- step 1.3 -->
-  <circle cx="74" cy="466" r="13" fill="#2563eb"/>
-  <text x="74" y="471" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">3</text>
-  <text x="96" y="472" font-size="16" font-weight="700" fill="#0f172a">위키 링크를 따라 탐색 (best-first)</text>
-  <text x="96" y="494" font-size="13" fill="#475569">“claim + 지금 문서”와 가장 비슷한 링크부터 열기 · 최대 깊이 3</text>
-  <text x="96" y="513" font-size="13" fill="#475569">나가는 링크 상위 5개 + 시작 문서로 들어오는 링크 상위 3개</text>
-  <!-- mini graph -->
-  <rect x="96" y="530" width="120" height="34" rx="8" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
-  <text x="156" y="552" font-size="13" font-weight="700" text-anchor="middle" fill="#1e3a8a">Carrie Coon</text>
-  <line x1="216" y1="547" x2="296" y2="547" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrowBlue)"/>
-  <rect x="300" y="530" width="150" height="34" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
-  <text x="375" y="552" font-size="13" font-weight="700" text-anchor="middle" fill="#92400e">Gone Girl (film) ★</text>
-  <text x="462" y="545" font-size="12" fill="#92400e">claim에 없던 문서를</text>
-  <text x="462" y="561" font-size="12" fill="#92400e">링크로 찾음 (7번째)</text>
-  <line x1="216" y1="556" x2="290" y2="584" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4 3"/>
-  <rect x="292" y="574" width="130" height="24" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
-  <text x="357" y="591" font-size="12" text-anchor="middle" fill="#64748b">Fargo (TV series) …</text>
-
-  <!-- step 1.4 -->
-  <circle cx="74" cy="630" r="13" fill="#2563eb"/>
-  <text x="74" y="635" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">4</text>
-  <text x="96" y="636" font-size="16" font-weight="700" fill="#0f172a">후보 문서 20개</text>
-  <g font-size="12">
-    <rect x="96" y="650" width="92" height="24" rx="12" fill="#fff" stroke="#93c5fd"/>
-    <text x="142" y="667" text-anchor="middle" fill="#1e3a8a">Carrie Coon</text>
-    <rect x="194" y="650" width="128" height="24" rx="12" fill="#fff" stroke="#93c5fd"/>
-    <text x="258" y="667" text-anchor="middle" fill="#1e3a8a">Fargo (TV series)</text>
-    <rect x="328" y="650" width="124" height="24" rx="12" fill="#fef3c7" stroke="#d97706"/>
-    <text x="390" y="667" text-anchor="middle" fill="#92400e">Gone Girl (film)</text>
-    <rect x="458" y="650" width="96" height="24" rx="12" fill="#fff" stroke="#93c5fd"/>
-    <text x="506" y="667" text-anchor="middle" fill="#1e3a8a">Gillian Flynn</text>
-    <text x="566" y="667" fill="#64748b">…</text>
+  <!-- tech line -->
+  <g font-size="13" fill="#94a3b8" text-anchor="middle">
+    <text x="665" y="436">spaCy 개체 추출 · 제목 임베딩 · 위키 링크 그래프 best-first 탐색</text>
+    <text x="1185" y="436">cross-encoder</text>
+    <text x="1445" y="436">BERT-base</text>
   </g>
-  <text x="64" y="720" font-size="12" fill="#64748b">데이터: 위키피디아 2017-10-01 첫 단락 · 문서 523만 · 링크 2,268만 개 (HoVer와 같은 코퍼스)</text>
 
-  <!-- arrow 1 -> 2 -->
-  <line x1="624" y1="460" x2="652" y2="460" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
-
-  <!-- ===== panel 2 ===== -->
-  <g filter="url(#shadow)">
-    <rect x="660" y="180" width="400" height="560" rx="16" fill="#ecfdf5" stroke="#a7f3d0"/>
-  </g>
-  <rect x="660" y="180" width="400" height="48" rx="16" fill="#059669"/>
-  <rect x="660" y="208" width="400" height="20" fill="#059669"/>
-  <text x="684" y="211" font-size="19" font-weight="700" fill="#ffffff">② 근거 문장 고르기</text>
-
-  <text x="684" y="266" font-size="16" font-weight="700" fill="#0f172a">문장마다 근거일 확률 계산</text>
-  <text x="684" y="288" font-size="13" fill="#475569">후보 문서 20개의 모든 문장 · cross-encoder</text>
-  <text x="684" y="306" font-size="13" fill="#475569">(HoVer로 미세조정한 MiniLM)</text>
-
-  <!-- sentence rows -->
-  <g font-size="12">
-    <!-- row 1 -->
-    <rect x="684" y="322" width="352" height="66" rx="8" fill="#ffffff" stroke="#34d399" stroke-width="1.5"/>
-    <rect x="696" y="334" width="46" height="20" rx="4" fill="#059669"/>
-    <text x="719" y="349" text-anchor="middle" font-weight="700" fill="#fff">0.99</text>
-    <text x="750" y="349" font-weight="700" fill="#065f46">Carrie Coon</text>
-    <text x="1024" y="349" text-anchor="end" fill="#059669">정답 근거 ✓</text>
-    <text x="696" y="373" fill="#334155">“… starred as Margo Dunne in the 2014 film “Gone Girl”.”</text>
-    <!-- row 2 -->
-    <rect x="684" y="396" width="352" height="66" rx="8" fill="#ffffff" stroke="#34d399" stroke-width="1.5"/>
-    <rect x="696" y="408" width="46" height="20" rx="4" fill="#059669"/>
-    <text x="719" y="423" text-anchor="middle" font-weight="700" fill="#fff">0.90</text>
-    <text x="750" y="423" font-weight="700" fill="#065f46">Gone Girl (film)</text>
-    <text x="1024" y="423" text-anchor="end" fill="#059669">정답 근거 ✓</text>
-    <text x="696" y="447" fill="#334155">“Set in Missouri, the story begins as a mystery …”</text>
-    <!-- threshold -->
-    <line x1="684" y1="476" x2="1036" y2="476" stroke="#dc2626" stroke-width="2" stroke-dasharray="6 4"/>
-    <rect x="874" y="466" width="162" height="20" rx="10" fill="#fef2f2" stroke="#fca5a5"/>
-    <text x="955" y="480" text-anchor="middle" fill="#b91c1c">기준값 0.5 · 아래는 버림</text>
-    <!-- row 3 -->
-    <rect x="684" y="490" width="352" height="46" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
-    <rect x="696" y="502" width="46" height="20" rx="4" fill="#94a3b8"/>
-    <text x="719" y="517" text-anchor="middle" font-weight="700" fill="#fff">0.47</text>
-    <text x="750" y="517" fill="#64748b">Gone Girl (film) · “Gone Girl is a 2014 American …”</text>
-    <!-- row 4 -->
-    <rect x="684" y="542" width="352" height="46" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
-    <rect x="696" y="554" width="46" height="20" rx="4" fill="#cbd5e1"/>
-    <text x="719" y="569" text-anchor="middle" font-weight="700" fill="#fff">0.24</text>
-    <text x="750" y="569" fill="#94a3b8">Gloria Burgle · “… by actress Carrie Coon.”</text>
-  </g>
-  <text x="684" y="622" font-size="13" font-weight="700" fill="#0f172a">선택 규칙</text>
-  <text x="684" y="644" font-size="13" fill="#475569">· 확률이 기준값 이상인 문장 (문서당 최대 2, 전체 최대 5)</text>
-  <text x="684" y="664" font-size="13" fill="#475569">· 아직 한 문장도 없는 문서는 가장 높은 1문장을 구제</text>
-  <text x="684" y="684" font-size="13" fill="#475569">· 기준값은 train 교차 예측 점수로 결정</text>
-
-  <!-- arrow 2 -> 3 -->
-  <line x1="1064" y1="460" x2="1092" y2="460" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
-
-  <!-- ===== panel 3 ===== -->
-  <g filter="url(#shadow)">
-    <rect x="1100" y="180" width="260" height="560" rx="16" fill="#f5f3ff" stroke="#ddd6fe"/>
-  </g>
-  <rect x="1100" y="180" width="260" height="48" rx="16" fill="#7c3aed"/>
-  <rect x="1100" y="208" width="260" height="20" fill="#7c3aed"/>
-  <text x="1124" y="211" font-size="19" font-weight="700" fill="#ffffff">③ 판정</text>
-
-  <text x="1124" y="266" font-size="16" font-weight="700" fill="#0f172a">BERT-base 검증 모델</text>
-  <text x="1124" y="288" font-size="13" fill="#475569">HoVer 공식 학습 설정과 동일</text>
-
-  <rect x="1124" y="312" width="212" height="96" rx="10" fill="#ffffff" stroke="#c4b5fd"/>
-  <text x="1230" y="338" font-size="13" text-anchor="middle" fill="#6d28d9" font-family="Consolas,monospace">[CLS] claim</text>
-  <text x="1230" y="362" font-size="13" text-anchor="middle" fill="#6d28d9" font-family="Consolas,monospace">[SEP] 근거 문장들</text>
-  <text x="1230" y="386" font-size="13" text-anchor="middle" fill="#6d28d9" font-family="Consolas,monospace">[SEP]</text>
-  <line x1="1230" y1="414" x2="1230" y2="452" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#arrow)"/>
-
-  <rect x="1124" y="462" width="212" height="58" rx="29" fill="#16a34a"/>
-  <text x="1230" y="490" font-size="18" font-weight="700" text-anchor="middle" fill="#ffffff">SUPPORTED</text>
-  <text x="1230" y="510" font-size="12" text-anchor="middle" fill="#dcfce7">확률 0.96</text>
-  <rect x="1124" y="532" width="212" height="40" rx="20" fill="#ffffff" stroke="#e2e8f0"/>
-  <text x="1230" y="557" font-size="15" text-anchor="middle" fill="#94a3b8">NOT_SUPPORTED</text>
-
-  <text x="1230" y="604" font-size="14" font-weight="700" text-anchor="middle" fill="#16a34a">정답: SUPPORTED ✓</text>
-
-  <!-- footnote -->
-  <text x="40" y="772" font-size="12" fill="#94a3b8">예시 수치: dev claim 7e78668c의 실제 실행 결과(나가는 링크만 쓰는 설정, 판정 입력은 상위 5문장). 문장 확률 = sigmoid(cross-encoder 점수). 기준값 0.5 줄은 hybrid 규칙을 적용했을 때 남는 문장을 보여 줌.</text>
+  <!-- data source -->
+  <rect x="440" y="468" width="450" height="40" rx="20" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="665" y="494" font-size="14" fill="#475569" text-anchor="middle">위키피디아 2017 첫 단락 · 문서 523만 · 링크 2,268만</text>
+  <line x1="665" y1="468" x2="665" y2="446" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="4 4"/>
 </svg>

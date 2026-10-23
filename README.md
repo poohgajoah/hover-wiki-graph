@@ -55,7 +55,7 @@ HoVer 근거 문서 제목 18,299개는 두 그래프 모두에 노드로 들어
 
 ![HoVer 사실 검증 파이프라인](docs/pipeline.png)
 
-원본 벡터 이미지: [docs/pipeline.svg](docs/pipeline.svg). 예시는 dev claim의 실제 실행 결과입니다.
+원본 벡터 이미지: [docs/pipeline.svg](docs/pipeline.svg)
 
 ### train과 dev의 쓰임
 
