@@ -53,51 +53,9 @@ HoVer 근거 문서 제목 18,299개는 두 그래프 모두에 노드로 들어
 
 ### claim 하나가 판정되기까지
 
-```mermaid
-flowchart TD
-    subgraph PREP["데이터"]
-        WIKI["2017-10-01 위키피디아<br/>HotpotQA 첫 단락 덤프"] --> TITLES["제목 리스트<br/>523만 개"]
-        WIKI --> GRAPH["첫 단락 링크 그래프<br/>고유 링크 2,268만 개"]
-    end
+![HoVer 사실 검증 파이프라인](docs/pipeline.png)
 
-    CLAIM(["claim"])
-
-    subgraph RETR["1. 후보 문서 찾기"]
-        NER["spaCy en_core_web_trf 개체 추출<br/>DATE·숫자류 라벨 제외"]
-        NGRAM["claim n-gram을 제목 사전과 직접 매칭<br/>NER이 놓친 개체 보완"]
-        CHECK{"제목 리스트에서 확인"}
-        EMB["제목 임베딩 검색<br/>가장 비슷한 제목"]
-        DROP["버림"]
-        SEED["시작 후보 문서"]
-        BFS["best-first 링크 탐색<br/>점수 = cos(링크 문서 첫 문단, claim + 직전 문서 첫 문단)<br/>큐 우선순위 = 경로 평균 점수<br/>최대 깊이 3 · 방문 문서 제외<br/>나가는 링크 상위 5개 + 시작 문서에서만 들어오는 링크 상위 3개"]
-        DOCS["후보 문서 20개"]
-    end
-
-    subgraph EVIDENCE["2. 근거 문장 고르기"]
-        CE["cross-encoder로 claim–문장 점수"]
-        EVID["근거 문장<br/>문서마다 상위 2문장, 전체 5문장"]
-    end
-
-    subgraph VERIFY["3. 판정"]
-        VER["HoVer 공식 검증 모델<br/>bert-base-uncased"]
-    end
-
-    LABEL(["SUPPORTED / NOT_SUPPORTED"])
-
-    CLAIM --> NER & NGRAM
-    TITLES -.-> CHECK
-    NER --> CHECK
-    NGRAM --> CHECK
-    CHECK -->|"정확 일치"| SEED
-    CHECK -->|"소문자·괄호 제거 일치"| SEED
-    CHECK -->|"없음"| EMB
-    EMB -->|"유사도 ≥ 0.70"| SEED
-    EMB -->|"유사도 0.70 미만"| DROP
-    SEED --> BFS
-    GRAPH -.-> BFS
-    BFS -->|"20개 열람 또는 큐가 비면 종료"| DOCS
-    DOCS --> CE --> EVID --> VER --> LABEL
-```
+원본 벡터 이미지: [docs/pipeline.svg](docs/pipeline.svg). 예시는 dev claim의 실제 실행 결과입니다.
 
 ### train과 dev의 쓰임
 
