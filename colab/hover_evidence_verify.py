@@ -60,9 +60,16 @@ for s, p in RETRIEVAL.items():
 
 
 def run(*args):
-    """retrieval/ 스크립트를 GPU 환경에서 실행 (출력은 그대로 보여 줌)."""
+    """retrieval/ 스크립트를 GPU 환경에서 실행.
+    Colab은 자식 프로세스의 출력을 셀에 보여 주지 않으므로 한 줄씩 받아서 직접 출력한다
+    (오류가 나면 Traceback도 여기에 찍힘)."""
     env = {**os.environ, "HOVER_DATA": DATA, "PYTHONUNBUFFERED": "1"}
-    subprocess.run([sys.executable, *args], cwd=f"{REPO_DIR}/retrieval", env=env, check=True)
+    proc = subprocess.Popen([sys.executable, *args], cwd=f"{REPO_DIR}/retrieval", env=env,
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+    for line in proc.stdout:
+        print(line, end="")
+    if proc.wait():
+        raise RuntimeError(f"{args[0]} failed (exit {proc.returncode}) — 위 출력의 Traceback 참고")
 
 
 def done(path):
