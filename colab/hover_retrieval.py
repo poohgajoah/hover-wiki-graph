@@ -7,8 +7,8 @@
 # 3. resolved docs = start candidates → best-first search on the intro-paragraph link graph
 #    - score(v | u) = cos(intro(v), claim + intro(u)); queue priority = mean score along the path
 #    - max depth `MAX_DEPTH`, opened docs skipped, stop after `B` opened docs
-#    - per opened doc: top-`M` outgoing-link neighbours, plus (`DIRECTION = "both"`) top-`M_IN`
-#      incoming-link neighbours ranked separately
+#    - per opened doc: top-`M` outgoing-link neighbours, plus (`DIRECTION = "both"`, docs at depth
+#      <= `IN_MAX_DEPTH`) top-`M_IN` incoming-link neighbours ranked separately
 #
 # **Before running**: upload the local folder `data/colab_bundle/` to Google Drive as `MyDrive/hover_bundle/`
 # (`nodes.tsv.gz`, `links.i32`, `hover_*_release_v1.1.json`). Runtime → GPU (L4 or A100).
@@ -31,6 +31,8 @@ SIM_FLOOR = 0.70            # min cosine for the title-embedding fallback
 DIRECTION = "both"          # "out" = links leaving a doc only, "both" = also links pointing to it
 M_IN = 3                    # with "both": incoming-link neighbours enqueued per doc, chosen separately
                             # so hub in-links (tens of thousands) cannot crowd out the outgoing links
+IN_MAX_DEPTH = 0            # follow incoming links only from docs at depth <= this (0 = start docs only).
+                            # Following them at every depth spent the budget on 3/4-hop claims.
 EMB_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 TRF_WHEEL = "https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.8.0/en_core_web_trf-3.8.0-py3-none-any.whl"
 
@@ -143,10 +145,10 @@ del links
 print(f"{OUT_IDX.size:,} links, mean out-degree {OUT_IDX.size / N:.2f}")
 
 
-def neighbour_groups(u):
-    """(candidate ids, how many to enqueue) per link direction."""
+def neighbour_groups(u, depth):
+    """(candidate ids, how many to enqueue) per link direction for a doc opened at `depth`."""
     groups = [(OUT_IDX[OUT_PTR[u]:OUT_PTR[u + 1]], M)]
-    if DIRECTION == "both":
+    if DIRECTION == "both" and depth <= IN_MAX_DEPTH:
         groups.append((IN_IDX[IN_PTR[u]:IN_PTR[u + 1]], M_IN))
     return groups
 
@@ -305,7 +307,7 @@ def best_first(ci):
         if depth >= MAX_DEPTH:
             continue
         q, pushed = None, set()
-        for nb, m in neighbour_groups(u):     # outgoing and incoming links are ranked separately
+        for nb, m in neighbour_groups(u, depth):   # outgoing and incoming links are ranked separately
             if nb.size:
                 nb = nb[~np.isin(nb, list(seen))]
             if not nb.size or m <= 0:
@@ -362,8 +364,10 @@ display(report.style.format({c: "{:.3f}" for c in report.columns if c != "n"}))
 # %%
 # ---- save per-claim output ----
 os.makedirs(f"{BUNDLE}/results", exist_ok=True)
-tag = (f"{SPLIT}_B{B}_M{M}_d{MAX_DEPTH}_{DIRECTION}" + (f"_in{M_IN}" if DIRECTION == "both" else "")
-       + f"_floor{SIM_FLOOR}")
+in_part = ""
+if DIRECTION == "both":
+    in_part = f"_in{M_IN}" + (f"d{IN_MAX_DEPTH}" if IN_MAX_DEPTH < MAX_DEPTH - 1 else "")
+tag = f"{SPLIT}_B{B}_M{M}_d{MAX_DEPTH}_{DIRECTION}{in_part}_floor{SIM_FLOOR}"
 with open(f"{BUNDLE}/results/{tag}.jsonl", "w", encoding="utf-8") as f:
     for c, m, s, r in zip(claims, mentions, seeds, results):
         f.write(json.dumps({

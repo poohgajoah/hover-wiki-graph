@@ -17,8 +17,8 @@
 # %%
 # ---- 설정 ----
 BUNDLE = "/content/drive/MyDrive/hover_bundle"
-RETRIEVAL_TAG = "B20_M5_d3_both_in3_floor0.7"   # hover_retrieval.ipynb 결과 파일 이름의 설정 부분
-                                                 # (이전 설정: "B20_M5_d3_out_floor0.7")
+RETRIEVAL_TAG = "B20_M5_d3_both_in3d0_floor0.7"   # hover_retrieval.ipynb 결과 파일 이름의 설정 부분
+# 이전 설정: "B20_M5_d3_out_floor0.7"(나가는 링크만), "B20_M5_d3_both_in3_floor0.7"(모든 깊이에서 들어오는 링크)
 PER_DOC = 2                                 # 문서마다 남길 문장 수
 N = 5                                       # 전체 근거 문장 상한
 REPO = "https://github.com/poohgajoah/hover-wiki-graph.git"
@@ -157,3 +157,7 @@ with open(PRED, encoding="utf-8") as f:
     preds = [json.loads(l) for l in f]
 print(len(preds), "predictions:", dict(Counter(p["pred"] for p in preds)))
 print("saved", PRED)
+
+# %%
+# ---- 6. dev 단계별 평가 (retrieval/evaluate.py) ----
+run("evaluate.py", "--split", "dev", "--tag", RETRIEVAL_TAG, "--evidence-tag", f"evidence_k{PER_DOC}_n{N}")
