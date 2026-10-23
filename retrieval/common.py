@@ -10,7 +10,7 @@ import numpy as np
 import torch
 
 ROOT = Path(__file__).resolve().parent.parent
-DATA = ROOT / "data"
+DATA = Path(os.environ.get("HOVER_DATA", ROOT / "data"))   # HOVER_DATA relocates everything (Colab)
 STORE = DATA / "store"
 DB_PATH = STORE / "wiki.db"
 RESULTS = DATA / "results"      # Colab retrieval outputs (*.jsonl) go here

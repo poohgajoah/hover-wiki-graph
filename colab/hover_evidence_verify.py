@@ -1,0 +1,123 @@
+# %% [markdown]
+# # HoVer: 근거 문장 선택 + 검증 (Colab GPU)
+#
+# `hover_retrieval.ipynb`가 만든 후보 문서(`hover_bundle/results/{train,dev}_….jsonl`)를 입력으로
+# 저장소의 `retrieval/` 스크립트를 GPU에서 실행합니다.
+#
+# 1. 첫 단락 문장 저장소 만들기 (HotpotQA 2017 덤프를 Colab 디스크로 받음, Drive 용량 안 씀)
+# 2. cross-encoder 학습 — 양성: 정답 근거 문장, 음성: 정답 문서의 다른 문장 + 검색된 오답 문서의 문장
+# 3. train·dev 근거 문장 선택 — 문서마다 상위 `PER_DOC`문장, 전체 `N`문장
+# 4. 검증 모델 학습 — HoVer 공식 레시피 (bert-base-uncased, 길이 200, claim ≤ 60토큰, lr 3e-5, 배치 4×2, 3,000스텝)
+# 5. dev 예측 — `…pred.jsonl` (평가는 따로)
+#
+# 모델과 결과는 Drive(`hover_bundle/models`, `hover_bundle/results`)에 저장되고,
+# 다시 실행하면 이미 끝난 단계는 건너뜁니다. 런타임 → GPU(L4 또는 A100).
+
+# %%
+# ---- 설정 ----
+BUNDLE = "/content/drive/MyDrive/hover_bundle"
+RETRIEVAL_TAG = "B20_M5_d3_out_floor0.7"   # hover_retrieval.ipynb 결과 파일 이름의 설정 부분
+PER_DOC = 2                                 # 문서마다 남길 문장 수
+N = 5                                       # 전체 근거 문장 상한
+REPO = "https://github.com/poohgajoah/hover-wiki-graph.git"
+FORCE = False                               # True면 Drive에 결과가 있어도 모든 단계를 다시 실행
+
+# %%
+from google.colab import drive
+drive.mount("/content/drive")
+!apt-get -qq install -y aria2 > /dev/null
+!rm -rf /content/hover-wiki-graph && git clone -q --depth 1 {REPO} /content/hover-wiki-graph
+
+# %%
+import json
+import os
+import subprocess
+import sys
+
+REPO_DIR = "/content/hover-wiki-graph"
+DATA = "/content/data"                      # HOVER_DATA: retrieval/ 스크립트가 쓰는 데이터 폴더
+WORK = "/content/work"
+os.makedirs(f"{DATA}/store", exist_ok=True)
+os.makedirs(WORK, exist_ok=True)
+for name in ("results", "models"):          # 결과·모델은 Drive에 바로 쓰이도록 연결
+    os.makedirs(f"{BUNDLE}/{name}", exist_ok=True)
+    if not os.path.islink(f"{DATA}/{name}"):
+        os.symlink(f"{BUNDLE}/{name}", f"{DATA}/{name}")
+for split in ("train", "dev"):
+    dst = f"{DATA}/hover_{split}_release_v1.1.json"
+    if not os.path.exists(dst):
+        os.symlink(f"{BUNDLE}/hover_{split}_release_v1.1.json", dst)
+
+RES = f"{DATA}/results"
+RETRIEVAL = {s: f"{RES}/{s}_{RETRIEVAL_TAG}.jsonl" for s in ("train", "dev")}
+EVIDENCE = {s: f"{RES}/{s}_{RETRIEVAL_TAG}.evidence_k{PER_DOC}_n{N}.jsonl" for s in ("train", "dev")}
+PRED = f"{RES}/dev_{RETRIEVAL_TAG}.evidence_k{PER_DOC}_n{N}.pred.jsonl"
+CE_DIR, VER_DIR = f"{DATA}/models/sentence_selector", f"{DATA}/models/verifier"
+for s, p in RETRIEVAL.items():
+    assert os.path.exists(p), f"{s} 검색 결과가 없습니다: {p}"
+    print(s, sum(1 for _ in open(p, encoding="utf-8")), "claims")
+
+
+def run(*args):
+    """retrieval/ 스크립트를 GPU 환경에서 실행 (출력은 그대로 보여 줌)."""
+    env = {**os.environ, "HOVER_DATA": DATA, "PYTHONUNBUFFERED": "1"}
+    subprocess.run([sys.executable, *args], cwd=f"{REPO_DIR}/retrieval", env=env, check=True)
+
+
+def done(path):
+    return not FORCE and os.path.exists(path)
+
+# %%
+# ---- 1. 첫 단락 문장 저장소 ----
+ABS_URL = "https://nlp.stanford.edu/projects/hotpotqa/enwiki-20171001-pages-meta-current-withlinks-abstracts.tar.bz2"
+if not os.path.exists(f"{DATA}/store/wiki.db"):
+    if not os.path.exists(f"{WORK}/abstracts"):
+        subprocess.run(["aria2c", "-q", "-x", "16", "-s", "16", "-d", WORK, "-o", "abstracts.tar.bz2", ABS_URL], check=True)
+        os.makedirs(f"{WORK}/abstracts", exist_ok=True)
+        subprocess.run(["tar", "-xjf", f"{WORK}/abstracts.tar.bz2", "-C", f"{WORK}/abstracts"], check=True)
+        os.remove(f"{WORK}/abstracts.tar.bz2")
+    run("build_store.py", "--nodes", f"{BUNDLE}/nodes.tsv.gz", "--links", f"{BUNDLE}/links.i32",
+        "--abstracts", f"{WORK}/abstracts", "--out", f"{DATA}/store/wiki.db")
+print("store ready")
+
+# %%
+# ---- 2. cross-encoder 학습 ----
+if done(f"{CE_DIR}/config.json"):
+    print("skip: cross-encoder already trained at", CE_DIR)
+else:
+    run("sentence_selector.py", "train", "--retrieval", RETRIEVAL["train"], "--out", CE_DIR)
+
+# %%
+# ---- 3. 근거 문장 선택 (train, dev) ----
+for split in ("train", "dev"):
+    if done(EVIDENCE[split]):
+        print("skip:", EVIDENCE[split])
+        continue
+    run("sentence_selector.py", "select", "--retrieval", RETRIEVAL[split], "--out", CE_DIR,
+        "--per-doc", str(PER_DOC), "--n", str(N), "--batch-size", "256", "--output", EVIDENCE[split])
+
+with open(EVIDENCE["dev"], encoding="utf-8") as f:
+    ex = json.loads(f.readline())
+print(ex["claim"])
+for e in ex["evidence"]:
+    print(f"  {e['score']:7.3f}  [{e['title']} #{e['sent_id']}] {e['text'].strip()[:120]}")
+
+# %%
+# ---- 4. 검증 모델 학습 ----
+if done(f"{VER_DIR}/config.json"):
+    print("skip: verifier already trained at", VER_DIR)
+else:
+    run("verifier.py", "train", "--evidence", EVIDENCE["train"], "--out", VER_DIR)
+
+# %%
+# ---- 5. dev 예측 ----
+if done(PRED):
+    print("skip:", PRED)
+else:
+    run("verifier.py", "predict", "--evidence", EVIDENCE["dev"], "--out", VER_DIR, "--output", PRED)
+
+from collections import Counter
+with open(PRED, encoding="utf-8") as f:
+    preds = [json.loads(l) for l in f]
+print(len(preds), "predictions:", dict(Counter(p["pred"] for p in preds)))
+print("saved", PRED)

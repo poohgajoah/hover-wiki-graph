@@ -124,8 +124,13 @@ flowchart LR
 3. **검증 (로컬)** — `retrieval/verifier.py`: HoVer 공식 레시피(bert-base-uncased, 최대 길이 200,
    claim ≤ 60토큰, 학습률 3e-5, 배치 4 × 2, 3,000스텝)로 train에서 고른 근거 문장을 넣어 학습합니다.
 
-`retrieval/build_store.py`는 `data/store/wiki.db`(HoVer 문장 번호와 같은 첫 단락 문장)를 만듭니다.
-Colab 결과를 `data/results/`에 넣은 뒤 아래 순서로 실행합니다.
+2·3단계는 Colab GPU에서 [colab/hover_evidence_verify.ipynb](colab/hover_evidence_verify.ipynb)로
+한 번에 돌릴 수 있습니다(약 30~45분). 이 노트북은 같은 `retrieval/` 스크립트를 실행하고, 모델과 결과를
+Drive `hover_bundle/models`, `hover_bundle/results`에 저장합니다.
+
+로컬에서 돌릴 때는 `retrieval/build_store.py`로 `data/store/wiki.db`(HoVer 문장 번호와 같은 첫 단락 문장)를
+만들고, Colab 결과를 `data/results/`에 넣은 뒤 아래 순서로 실행합니다. 데이터 폴더는 환경변수
+`HOVER_DATA`로 바꿀 수 있습니다.
 ```
 cd retrieval
 uv run python sentence_selector.py train  --retrieval ../data/results/train_B20_M5_d3_out_floor0.7.jsonl
