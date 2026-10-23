@@ -6,12 +6,16 @@
 # 2. mention → title: exact match → lower-case/parenthesis-stripped match → title-embedding search (dropped below `SIM_FLOOR`)
 # 3. resolved docs = start candidates → best-first search on the intro-paragraph link graph
 #    - score(v | u) = cos(intro(v), claim + intro(u)); queue priority = mean score along the path
-#    - max depth `MAX_DEPTH`, opened docs skipped, top-`M` neighbours enqueued per doc, stop after `B` opened docs
+#    - max depth `MAX_DEPTH`, opened docs skipped, stop after `B` opened docs
+#    - per opened doc: top-`M` outgoing-link neighbours, plus (`DIRECTION = "both"`) top-`M_IN`
+#      incoming-link neighbours ranked separately
 #
 # **Before running**: upload the local folder `data/colab_bundle/` to Google Drive as `MyDrive/hover_bundle/`
 # (`nodes.tsv.gz`, `links.i32`, `hover_*_release_v1.1.json`). Runtime → GPU (L4 or A100).
 #
-# First run downloads the HotpotQA 2017 abstracts (1.55 GB) and embeds 5.2M titles and intro paragraphs;
+# Intro paragraphs come from `hover_bundle/sents.jsonl.gz` when present (made locally by
+# `retrieval/export_sentences.py`), otherwise from the Stanford-hosted HotpotQA 2017 dump (1.55 GB).
+# The run embeds 5.2M titles and intro paragraphs;
 # with `CACHE` set these are stored on Drive (≈ 10 GB) and reused next time.
 
 # %%
@@ -24,7 +28,9 @@ B = 20                      # documents opened per claim
 M = 5                       # neighbours enqueued per opened document
 MAX_DEPTH = 3
 SIM_FLOOR = 0.70            # min cosine for the title-embedding fallback
-DIRECTION = "out"           # "out" = links leaving a doc, "both" = also incoming links
+DIRECTION = "both"          # "out" = links leaving a doc only, "both" = also links pointing to it
+M_IN = 3                    # with "both": incoming-link neighbours enqueued per doc, chosen separately
+                            # so hub in-links (tens of thousands) cannot crowd out the outgoing links
 EMB_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 TRF_WHEEL = "https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.8.0/en_core_web_trf-3.8.0-py3-none-any.whl"
 
@@ -78,11 +84,21 @@ def parse_shard(path):
     return out
 
 
+SENTS = f"{BUNDLE}/sents.jsonl.gz"   # export_sentences.py output; avoids the Stanford download
+
+
 def load_texts():
     cached = f"{CACHE}/texts.pkl" if CACHE else None
     if cached and os.path.exists(cached):
         with open(cached, "rb") as f:
             return pickle.load(f)
+    if os.path.exists(SENTS):
+        texts = [""] * N
+        with gzip.open(SENTS, "rt", encoding="utf-8", newline="\n") as f:
+            for line in tqdm(f, total=N, desc="sents.jsonl.gz"):
+                i, _title, sents = json.loads(line)
+                texts[i] = "".join(sents).strip()
+        return texts
     tar = f"{WORK}/abstracts.tar.bz2"
     if not os.path.exists(f"{WORK}/abstracts"):
         subprocess.run(["aria2c", "-q", "-x", "16", "-s", "16", "-d", WORK, "-o", "abstracts.tar.bz2", ABS_URL], check=True)
@@ -127,11 +143,12 @@ del links
 print(f"{OUT_IDX.size:,} links, mean out-degree {OUT_IDX.size / N:.2f}")
 
 
-def neighbours(u):
-    nb = OUT_IDX[OUT_PTR[u]:OUT_PTR[u + 1]]
+def neighbour_groups(u):
+    """(candidate ids, how many to enqueue) per link direction."""
+    groups = [(OUT_IDX[OUT_PTR[u]:OUT_PTR[u + 1]], M)]
     if DIRECTION == "both":
-        nb = np.union1d(nb, IN_IDX[IN_PTR[u]:IN_PTR[u + 1]])
-    return nb
+        groups.append((IN_IDX[IN_PTR[u]:IN_PTR[u + 1]], M_IN))
+    return groups
 
 # %%
 # ---- embeddings: titles and intro paragraphs (GPU, cached on Drive) ----
@@ -287,16 +304,22 @@ def best_first(ci):
         opened.append(u)
         if depth >= MAX_DEPTH:
             continue
-        nb = neighbours(u)
-        if nb.size:
-            nb = nb[~np.isin(nb, list(seen))]
-        if not nb.size:
-            continue
-        q = encode([claim + " " + texts[u]])[0]
-        sc = PE[torch.from_numpy(nb).to(DEV)] @ q
-        val, idx = torch.topk(sc.float(), min(M, nb.size))
-        for v, j in zip(val.tolist(), idx.tolist()):
-            heapq.heappush(heap, (-(ssum + v) / (plen + 1), next(tie), int(nb[j]), depth + 1, ssum + v, plen + 1))
+        q, pushed = None, set()
+        for nb, m in neighbour_groups(u):     # outgoing and incoming links are ranked separately
+            if nb.size:
+                nb = nb[~np.isin(nb, list(seen))]
+            if not nb.size or m <= 0:
+                continue
+            if q is None:
+                q = encode([claim + " " + texts[u]])[0]
+            sc = PE[torch.from_numpy(nb).to(DEV)] @ q
+            val, idx = torch.topk(sc.float(), min(m, nb.size))
+            for v, j in zip(val.tolist(), idx.tolist()):
+                d = int(nb[j])
+                if d in pushed:
+                    continue
+                pushed.add(d)
+                heapq.heappush(heap, (-(ssum + v) / (plen + 1), next(tie), d, depth + 1, ssum + v, plen + 1))
     return opened
 
 
@@ -339,7 +362,8 @@ display(report.style.format({c: "{:.3f}" for c in report.columns if c != "n"}))
 # %%
 # ---- save per-claim output ----
 os.makedirs(f"{BUNDLE}/results", exist_ok=True)
-tag = f"{SPLIT}_B{B}_M{M}_d{MAX_DEPTH}_{DIRECTION}_floor{SIM_FLOOR}"
+tag = (f"{SPLIT}_B{B}_M{M}_d{MAX_DEPTH}_{DIRECTION}" + (f"_in{M_IN}" if DIRECTION == "both" else "")
+       + f"_floor{SIM_FLOOR}")
 with open(f"{BUNDLE}/results/{tag}.jsonl", "w", encoding="utf-8") as f:
     for c, m, s, r in zip(claims, mentions, seeds, results):
         f.write(json.dumps({

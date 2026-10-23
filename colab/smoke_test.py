@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "colab" / "hover_retrieval.py"
 FULL = ROOT / "data" / "colab_bundle"
 SMALL = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "data" / "smoke_bundle"
-LIMIT, DISTRACTORS, NB_CAP = 30, 3000, 300
+LIMIT, DISTRACTORS, NB_CAP = 30, 2000, 60
 
 
 def make_small_bundle():
@@ -49,6 +49,14 @@ def make_small_bundle():
     m = (remap[links[:, 0]] >= 0) & (remap[links[:, 1]] >= 0)
     remap[links[m]].astype("<i4").tofile(SMALL / "links.i32")
     json.dump(claims, open(SMALL / "hover_dev_release_v1.1.json", "w", encoding="utf-8"))
+    sents_src = FULL / "sents.jsonl.gz"     # exercise the sents.jsonl.gz path when it exists
+    if sents_src.exists():
+        with gzip.open(sents_src, "rt", encoding="utf-8", newline="\n") as src, \
+                gzip.open(SMALL / "sents.jsonl.gz", "wt", encoding="utf-8", newline="\n") as dst:
+            for line in src:
+                i, title, sents = json.loads(line)
+                if remap[i] >= 0:
+                    dst.write(json.dumps([int(remap[i]), title, sents], ensure_ascii=False) + "\n")
     print(f"small bundle: {len(old)} docs, {int(m.sum())} links", file=sys.stderr)
 
 

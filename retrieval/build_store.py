@@ -5,7 +5,8 @@ sentences (same segmentation as HoVer supporting_facts sentence ids).
 links(src, tgt): deduplicated intro-paragraph links between doc ids.
 
 Inputs default to the local graph build; on Colab pass the bundle files instead:
-  python build_store.py --nodes hover_bundle/nodes.tsv.gz --links hover_bundle/links.i32 --abstracts work/abstracts
+  python build_store.py --nodes hover_bundle/nodes.tsv.gz --links hover_bundle/links.i32 --sents hover_bundle/sents.jsonl.gz
+(--sents replaces --abstracts with the export of export_sentences.py).
 """
 import argparse
 import bz2
@@ -71,20 +72,29 @@ def main(args):
     id_of = read_nodes(Path(args.nodes))
     print(f"nodes: {len(id_of)}", file=sys.stderr)
 
-    shards = sorted(Path(args.abstracts).rglob("wiki_*.bz2"))[:args.max_shards]
     rows, missing = [], 0
-    for shard in tqdm(shards, desc="docs"):
-        with bz2.open(shard, "rt", encoding="utf-8") as f:
-            for line in f:
-                o = json.loads(line)
-                nid = id_of.get(o["title"], id_of.get(BREAKS.sub(" ", o["title"])))
-                if nid is None:
-                    missing += 1
-                    continue
-                rows.append((nid, o["title"], json.dumps(o["text"], ensure_ascii=False)))
-        if len(rows) > 200_000:
-            con.executemany("INSERT INTO docs VALUES (?,?,?)", rows)
-            rows.clear()
+    if args.sents:   # [node_id, title, sentences] lines from export_sentences.py
+        with gzip.open(args.sents, "rt", encoding="utf-8", newline="\n") as f:
+            for line in tqdm(f, desc="docs"):
+                nid, title, sents = json.loads(line)
+                rows.append((nid, title, json.dumps(sents, ensure_ascii=False)))
+                if len(rows) > 200_000:
+                    con.executemany("INSERT INTO docs VALUES (?,?,?)", rows)
+                    rows.clear()
+    else:
+        shards = sorted(Path(args.abstracts).rglob("wiki_*.bz2"))[:args.max_shards]
+        for shard in tqdm(shards, desc="docs"):
+            with bz2.open(shard, "rt", encoding="utf-8") as f:
+                for line in f:
+                    o = json.loads(line)
+                    nid = id_of.get(o["title"], id_of.get(BREAKS.sub(" ", o["title"])))
+                    if nid is None:
+                        missing += 1
+                        continue
+                    rows.append((nid, o["title"], json.dumps(o["text"], ensure_ascii=False)))
+            if len(rows) > 200_000:
+                con.executemany("INSERT INTO docs VALUES (?,?,?)", rows)
+                rows.clear()
     con.executemany("INSERT INTO docs VALUES (?,?,?)", rows)
     print(f"docs missing node id: {missing}", file=sys.stderr)
 
@@ -111,6 +121,7 @@ if __name__ == "__main__":
     p.add_argument("--nodes", default=str(GRAPH / "nodes.tsv"), help="nodes.tsv or nodes.tsv.gz")
     p.add_argument("--links", default=str(GRAPH / "edges.tsv"), help="edges.tsv or links.i32 (optional)")
     p.add_argument("--abstracts", default=str(DATA / "raw" / "abstracts"), help="extracted abstracts dump")
+    p.add_argument("--sents", help="sents.jsonl.gz from export_sentences.py (instead of --abstracts)")
     p.add_argument("--out", default=str(DB_PATH))
     p.add_argument("--max-shards", type=int, help="only the first N shards (testing)")
     main(p.parse_args())

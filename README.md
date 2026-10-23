@@ -69,7 +69,7 @@ flowchart TD
         EMB["제목 임베딩 검색<br/>가장 비슷한 제목"]
         DROP["버림"]
         SEED["시작 후보 문서"]
-        BFS["best-first 탐색<br/>점수 = cos(링크 문서 첫 문단, claim + 직전 문서 첫 문단)<br/>큐 우선순위 = 경로 평균 점수<br/>최대 깊이 3 · 방문 문서 제외 · 이웃 상위 M=5개"]
+        BFS["best-first 탐색<br/>점수 = cos(링크 문서 첫 문단, claim + 직전 문서 첫 문단)<br/>큐 우선순위 = 경로 평균 점수<br/>최대 깊이 3 · 방문 문서 제외 · 나가는 링크 상위 M=5개 + 들어오는 링크 상위 M_IN=3개"]
         DOCS["후보 문서 B=20개"]
     end
 
@@ -126,7 +126,10 @@ flowchart LR
 
 2·3단계는 Colab GPU에서 [colab/hover_evidence_verify.ipynb](colab/hover_evidence_verify.ipynb)로
 한 번에 돌릴 수 있습니다(약 30~45분). 이 노트북은 같은 `retrieval/` 스크립트를 실행하고, 모델과 결과를
-Drive `hover_bundle/models`, `hover_bundle/results`에 저장합니다.
+Drive `hover_bundle/models/<검색 설정>/`, `hover_bundle/results`에 저장합니다.
+
+두 노트북은 첫 단락 문장을 `hover_bundle/sents.jsonl.gz`(약 570MB, `retrieval/export_sentences.py`로 로컬
+문장 저장소에서 만듦)에서 읽습니다. 이 파일이 없을 때만 Stanford 서버의 HotpotQA 덤프를 받습니다.
 
 로컬에서 돌릴 때는 `retrieval/build_store.py`로 `data/store/wiki.db`(HoVer 문장 번호와 같은 첫 단락 문장)를
 만들고, Colab 결과를 `data/results/`에 넣은 뒤 아래 순서로 실행합니다. 데이터 폴더는 환경변수
@@ -149,7 +152,7 @@ uv run python evaluate.py          # dev 단계별 성능 (아래 표)
 | 단계 | HoVer 공식 베이스라인 | 이 파이프라인 |
 |---|---|---|
 | 문서 후보 생성 | TF-IDF(DrQA, bi-gram)로 문서 검색 | claim 개체(spaCy `en_core_web_trf`, DATE·숫자류 제외) + n-gram 제목 매칭 → 제목 연결(정확 일치 → 소문자·괄호 제거 일치 → 제목 임베딩, 유사도 0.70 미만은 버림) |
-| 문서 선택 | TF-IDF 상위 20개를 BERT-base로 재순위 → 상위 5개 문서 | 시작 문서에서 첫 단락 링크 그래프를 best-first 탐색 (MiniLM 임베딩, 최대 깊이 3, 이웃 상위 5개) → 20개 문서 |
+| 문서 선택 | TF-IDF 상위 20개를 BERT-base로 재순위 → 상위 5개 문서 | 시작 문서에서 첫 단락 링크 그래프를 best-first 탐색 (MiniLM 임베딩, 최대 깊이 3, 나가는 링크 상위 5개 + 들어오는 링크 상위 3개를 따로 선택) → 20개 문서 |
 | 문서 간 연결 | 쓰지 않음 (문서를 독립적으로 점수화) | 위키 하이퍼링크를 따라 숨은 중간 개체(bridge) 문서로 이동 |
 | 문장 분리 | Stanford CoreNLP로 실행 시 분리 | HotpotQA 덤프에 저장된 문장 그대로 (HoVer 문장 번호와 일치) |
 | 근거 문장 선택 | BERT-base, 상위 5개 문서의 문장 중 임계값을 넘는 문장 | cross-encoder(`ms-marco-MiniLM-L-6-v2`에서 시작해 HoVer train으로 미세조정, 검색된 오답 문서의 문장을 음성으로 사용), 문서마다 상위 2문장, 전체 5문장 고정 |
@@ -157,6 +160,9 @@ uv run python evaluate.py          # dev 단계별 성능 (아래 표)
 | 검증 모델 학습 입력 | BERT+Retr: 파이프라인이 고른 근거 / BERT+Gold: 정답 근거 | 파이프라인이 고른 train 근거 (BERT+Retr 방식) |
 
 ## 성능 평가 (dev 4,000개)
+
+> 아래 수치는 나가는 링크만 따라가던 이전 설정(`DIRECTION = "out"`, 결과 태그 `B20_M5_d3_out_floor0.7`)의 결과입니다.
+> 들어오는 링크도 따라가는 현재 설정(`both_in3`)의 결과는 다시 실행한 뒤 추가합니다.
 
 ### 최종 결과 비교
 

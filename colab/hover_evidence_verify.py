@@ -11,13 +11,14 @@
 # 4. 검증 모델 학습 — HoVer 공식 레시피 (bert-base-uncased, 길이 200, claim ≤ 60토큰, lr 3e-5, 배치 4×2, 3,000스텝)
 # 5. dev 예측 — `…pred.jsonl` (평가는 따로)
 #
-# 모델과 결과는 Drive(`hover_bundle/models`, `hover_bundle/results`)에 저장되고,
+# 모델은 Drive `hover_bundle/models/<RETRIEVAL_TAG>/`, 결과는 `hover_bundle/results`에 저장되고,
 # 다시 실행하면 이미 끝난 단계는 건너뜁니다. 런타임 → GPU(L4 또는 A100).
 
 # %%
 # ---- 설정 ----
 BUNDLE = "/content/drive/MyDrive/hover_bundle"
-RETRIEVAL_TAG = "B20_M5_d3_out_floor0.7"   # hover_retrieval.ipynb 결과 파일 이름의 설정 부분
+RETRIEVAL_TAG = "B20_M5_d3_both_in3_floor0.7"   # hover_retrieval.ipynb 결과 파일 이름의 설정 부분
+                                                 # (이전 설정: "B20_M5_d3_out_floor0.7")
 PER_DOC = 2                                 # 문서마다 남길 문장 수
 N = 5                                       # 전체 근거 문장 상한
 REPO = "https://github.com/poohgajoah/hover-wiki-graph.git"
@@ -53,7 +54,9 @@ RES = f"{DATA}/results"
 RETRIEVAL = {s: f"{RES}/{s}_{RETRIEVAL_TAG}.jsonl" for s in ("train", "dev")}
 EVIDENCE = {s: f"{RES}/{s}_{RETRIEVAL_TAG}.evidence_k{PER_DOC}_n{N}.jsonl" for s in ("train", "dev")}
 PRED = f"{RES}/dev_{RETRIEVAL_TAG}.evidence_k{PER_DOC}_n{N}.pred.jsonl"
-CE_DIR, VER_DIR = f"{DATA}/models/sentence_selector", f"{DATA}/models/verifier"
+# 검색 설정마다 모델을 따로 둬서 설정끼리 그대로 비교할 수 있게 함
+CE_DIR = f"{DATA}/models/{RETRIEVAL_TAG}/sentence_selector"
+VER_DIR = f"{DATA}/models/{RETRIEVAL_TAG}/verifier"
 for s, p in RETRIEVAL.items():
     assert os.path.exists(p), f"{s} 검색 결과가 없습니다: {p}"
     print(s, sum(1 for _ in open(p, encoding="utf-8")), "claims")
@@ -77,12 +80,16 @@ def done(path):
 
 # %%
 # ---- 1. 첫 단락 문장 저장소 ----
-# 로컬에서 만든 store_subset.db(검색 결과·정답 문서만, 약 50MB)가 Drive에 있으면 그대로 쓰고,
-# 없으면 HotpotQA 2017 덤프를 Stanford 서버에서 받아 전체 저장소를 만듭니다.
+# 우선순위: ① Drive의 sents.jsonl.gz(전체 문서, export_sentences.py로 만든 것)로 전체 저장소 생성
+#          ② store_subset.db(이전 검색 결과·정답 문서만) ③ Stanford 서버의 HotpotQA 2017 덤프
 import shutil
 
 ABS_URL = "https://nlp.stanford.edu/projects/hotpotqa/enwiki-20171001-pages-meta-current-withlinks-abstracts.tar.bz2"
+SENTS = f"{BUNDLE}/sents.jsonl.gz"
 SUBSET = f"{BUNDLE}/store_subset.db"
+if not os.path.exists(f"{DATA}/store/wiki.db") and os.path.exists(SENTS):
+    run("build_store.py", "--nodes", f"{BUNDLE}/nodes.tsv.gz", "--links", f"{BUNDLE}/links.i32",
+        "--sents", SENTS, "--out", f"{DATA}/store/wiki.db")
 if not os.path.exists(f"{DATA}/store/wiki.db") and os.path.exists(SUBSET):
     shutil.copyfile(SUBSET, f"{DATA}/store/wiki.db")
     print("using", SUBSET)
@@ -94,7 +101,20 @@ if not os.path.exists(f"{DATA}/store/wiki.db"):
         os.remove(f"{WORK}/abstracts.tar.bz2")
     run("build_store.py", "--nodes", f"{BUNDLE}/nodes.tsv.gz", "--links", f"{BUNDLE}/links.i32",
         "--abstracts", f"{WORK}/abstracts", "--out", f"{DATA}/store/wiki.db")
-print("store ready")
+
+# 검색 결과에 나온 문서가 저장소에 다 있는지 확인 (빠지면 근거 문장이 조용히 비게 됨)
+import sqlite3
+con = sqlite3.connect(f"file:{DATA}/store/wiki.db?mode=ro", uri=True)
+needed = set()
+for p in RETRIEVAL.values():
+    with open(p, encoding="utf-8") as f:
+        for line in f:
+            needed.update(json.loads(line)["opened"])
+missing = [t for t in needed if con.execute("SELECT 1 FROM docs WHERE title = ?", (t,)).fetchone() is None]
+con.close()
+assert not missing, (f"{len(missing)}/{len(needed)} retrieved docs are not in the store "
+                     f"(e.g. {missing[:3]}); upload sents.jsonl.gz to {BUNDLE}")
+print(f"store ready: all {len(needed)} retrieved docs present")
 
 # %%
 # ---- 2. cross-encoder 학습 ----
