@@ -119,32 +119,38 @@ flowchart LR
     VT -->|"학습된 검증 모델"| PRED
 ```
 
-1. **후보 문서 (Colab, GPU)** — [colab/hover_retrieval.ipynb](colab/hover_retrieval.ipynb):
-   spaCy `en_core_web_trf` 개체 + claim n-gram → 제목 연결(정확 일치 → 소문자·괄호 제거 일치 →
-   제목 임베딩 검색) → 첫 단락 링크 그래프 best-first 탐색. 결과는 `results/<split>_B20_….jsonl`.
-2. **근거 문장 (로컬)** — `retrieval/sentence_selector.py`: HoVer train으로 학습한 cross-encoder
-   (정답 근거 문장 vs. 검색된 오답 문서의 문장). 문서마다 상위 2문장, 전체 N문장까지 남깁니다.
-3. **검증 (로컬)** — `retrieval/verifier.py`: HoVer 공식 레시피(bert-base-uncased, 최대 길이 200,
-   claim ≤ 60토큰, 학습률 3e-5, 배치 4 × 2, 3,000스텝)로 train에서 고른 근거 문장을 넣어 학습합니다.
+1. **후보 문서 찾기**: claim에서 개체(spaCy `en_core_web_trf`)와 제목 사전에 있는 n-gram을 뽑아
+   제목에 연결합니다(정확 일치 → 소문자·괄호 제거 일치 → 제목 임베딩 검색). 연결된 문서에서 시작해
+   첫 단락 링크 그래프를 best-first로 탐색하고, 20개 문서를 엽니다.
+2. **근거 문장 고르기**: HoVer train으로 학습한 cross-encoder(정답 근거 문장 vs. 검색된 오답 문서의 문장)로
+   후보 문서의 모든 문장에 점수를 매기고, 문서마다 상위 2문장, 전체 5문장을 남깁니다.
+3. **판정**: HoVer 공식 레시피(bert-base-uncased, 최대 길이 200, claim ≤ 60토큰, 학습률 3e-5,
+   배치 4 × 2, 3,000스텝)로 train에서 고른 근거 문장을 넣어 학습한 모델이 SUPPORTED / NOT_SUPPORTED를 판정합니다.
 
-2·3단계는 Colab GPU에서 [colab/hover_evidence_verify.ipynb](colab/hover_evidence_verify.ipynb)로
-한 번에 돌릴 수 있습니다(약 30~45분). 이 노트북은 같은 `retrieval/` 스크립트를 실행하고, 모델과 결과를
-Drive `hover_bundle/models/<검색 설정>/`, `hover_bundle/results`에 저장합니다.
+### 실행 방법
 
-두 노트북은 첫 단락 문장을 `hover_bundle/sents.jsonl.gz`(약 570MB, `retrieval/export_sentences.py`로 로컬
-문장 저장소에서 만듦)에서 읽습니다. 이 파일이 없을 때만 Stanford 서버의 HotpotQA 덤프를 받습니다.
+GPU가 필요한 단계라 Colab 노트북으로 돌립니다.
 
-로컬에서 돌릴 때는 `retrieval/build_store.py`로 `data/store/wiki.db`(HoVer 문장 번호와 같은 첫 단락 문장)를
-만들고, Colab 결과를 `data/results/`에 넣은 뒤 아래 순서로 실행합니다. 데이터 폴더는 환경변수
-`HOVER_DATA`로 바꿀 수 있습니다.
+| 노트북 | 하는 일 |
+|---|---|
+| [colab/hover_retrieval.ipynb](colab/hover_retrieval.ipynb) | 1단계. 설정 셀의 `SPLIT`을 `dev`, `train`으로 바꿔 두 번 실행 |
+| [colab/hover_evidence_verify.ipynb](colab/hover_evidence_verify.ipynb) | 2·3단계와 dev 평가 |
+| [colab/speed_benchmark.ipynb](colab/speed_benchmark.ipynb) | 공식 베이스라인 재현과의 속도 비교 |
+
+필요한 파일은 Google Drive `MyDrive/hover_bundle/`에 둡니다. `scripts/make_colab_bundle.py`가 만드는
+노드·링크·HoVer json과, `retrieval/export_sentences.py`가 만드는 첫 단락 문장 `sents.jsonl.gz`입니다.
+결과는 `hover_bundle/results/`, 학습한 모델은 `hover_bundle/models/<검색 설정>/`에 저장됩니다.
+
+2·3단계는 `retrieval/` 스크립트이므로 노트북 없이 직접 실행할 수도 있습니다. `retrieval/build_store.py`로
+문장 저장소를 만들고 1단계 결과를 `data/results/`에 둔 뒤 실행합니다. 데이터 폴더는 환경변수 `HOVER_DATA`로 바꿀 수 있습니다.
 ```
 cd retrieval
-uv run python sentence_selector.py train  --retrieval ../data/results/train_B20_M5_d3_out_floor0.7.jsonl
-uv run python sentence_selector.py select --retrieval ../data/results/train_B20_M5_d3_out_floor0.7.jsonl
-uv run python sentence_selector.py select --retrieval ../data/results/dev_B20_M5_d3_out_floor0.7.jsonl
-uv run python verifier.py train   --evidence ../data/results/train_B20_M5_d3_out_floor0.7.evidence_k2_n5.jsonl
-uv run python verifier.py predict --evidence ../data/results/dev_B20_M5_d3_out_floor0.7.evidence_k2_n5.jsonl
-uv run python evaluate.py          # dev 단계별 성능 (아래 표)
+uv run python sentence_selector.py train  --retrieval ../data/results/train_B20_M5_d3_both_in3d0_floor0.7.jsonl
+uv run python sentence_selector.py select --retrieval ../data/results/train_B20_M5_d3_both_in3d0_floor0.7.jsonl
+uv run python sentence_selector.py select --retrieval ../data/results/dev_B20_M5_d3_both_in3d0_floor0.7.jsonl
+uv run python verifier.py train   --evidence ../data/results/train_B20_M5_d3_both_in3d0_floor0.7.evidence_k2_n5.jsonl
+uv run python verifier.py predict --evidence ../data/results/dev_B20_M5_d3_both_in3d0_floor0.7.evidence_k2_n5.jsonl
+uv run python evaluate.py --tag B20_M5_d3_both_in3d0_floor0.7   # dev 단계별 성능
 ```
 
 ## HoVer 공식 베이스라인과의 차이
