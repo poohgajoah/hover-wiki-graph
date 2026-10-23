@@ -1,4 +1,5 @@
 """Shared paths, I/O helpers and doc-store access for the local evidence/verification stages."""
+import hashlib
 import html
 import json
 import os
@@ -16,6 +17,11 @@ DB_PATH = STORE / "wiki.db"
 RESULTS = DATA / "results"      # Colab retrieval outputs (*.jsonl) go here
 MODELS = DATA / "models"
 LABELS = ["NOT_SUPPORTED", "SUPPORTED"]
+
+
+def fold_of(uid: str, folds: int) -> int:
+    """Deterministic fold of a claim (for cross-fitting the sentence selector)."""
+    return int(hashlib.md5(uid.encode("utf-8")).hexdigest(), 16) % folds
 
 
 def set_seed(seed: int = 42):

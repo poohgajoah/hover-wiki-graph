@@ -6,10 +6,13 @@
 #
 # 1. 첫 단락 문장 저장소 준비 — Drive의 `hover_bundle/store_subset.db`를 쓰고,
 #    없으면 HotpotQA 2017 덤프를 받아 Colab 디스크에 전체 저장소를 만듦
-# 2. cross-encoder 학습 — 양성: 정답 근거 문장, 음성: 정답 문서의 다른 문장 + 검색된 오답 문서의 문장
-# 3. train·dev 근거 문장 선택 — 문서마다 상위 `PER_DOC`문장, 전체 `N_SENT`문장
+# 2. cross-encoder 학습 — 양성: 정답 근거 문장, 음성: 정답 문서의 다른 문장 + 검색된 오답 문서의 문장.
+#    train 전체 모델(dev용) + `FOLDS`개 fold 모델(train 교차 예측용: 자기가 학습하지 않은 claim만 점수)
+# 3. 근거 문장 선택 — train은 교차 예측 점수, dev는 전체 모델 점수. `RULE = "hybrid"`면 train 교차 예측
+#    점수로 기준값을 고르고(dev는 쓰지 않음), 확률 기준값 이상 문장 + 빈 문서 구제 규칙을 적용
 # 4. 검증 모델 학습 — HoVer 공식 레시피 (bert-base-uncased, 길이 200, claim ≤ 60토큰, lr 3e-5, 배치 4×2, 3,000스텝)
-# 5. dev 예측 — `…pred.jsonl` (평가는 따로)
+# 5. dev 예측 — `…pred.jsonl`
+# 6. dev 단계별 평가
 #
 # 모델은 Drive `hover_bundle/models/<RETRIEVAL_TAG>/`, 결과는 `hover_bundle/results`에 저장되고,
 # 다시 실행하면 이미 끝난 단계는 건너뜁니다. 런타임 → GPU(L4 또는 A100).
@@ -21,6 +24,9 @@ RETRIEVAL_TAG = "B20_M5_d3_both_in3d0_floor0.7"   # hover_retrieval.ipynb 결과
 # 이전 설정: "B20_M5_d3_out_floor0.7"(나가는 링크만), "B20_M5_d3_both_in3_floor0.7"(모든 깊이에서 들어오는 링크)
 PER_DOC = 2                                 # 문서마다 남길 문장 수
 N_SENT = 5                                  # 전체 근거 문장 상한 (검색 노트북의 N과 같은 커널을 쓸 수 있어 이름을 구분)
+RULE = "hybrid"                             # "fixed" = 항상 상위 N_SENT개, "hybrid" = 확률 기준값 + 빈 문서 구제
+FOLDS = 2                                   # train 근거를 교차 예측할 fold 수
+MAX_COV_DROP = 1.0                          # 기준값 고를 때 허용하는 "정답 문서 모두 커버" 하락 (%p)
 REPO = "https://github.com/poohgajoah/hover-wiki-graph.git"
 FORCE = False                               # True면 Drive에 결과가 있어도 모든 단계를 다시 실행
 
@@ -52,11 +58,13 @@ for split in ("train", "dev"):
 
 RES = f"{DATA}/results"
 RETRIEVAL = {s: f"{RES}/{s}_{RETRIEVAL_TAG}.jsonl" for s in ("train", "dev")}
-EVIDENCE = {s: f"{RES}/{s}_{RETRIEVAL_TAG}.evidence_k{PER_DOC}_n{N_SENT}.jsonl" for s in ("train", "dev")}
-PRED = f"{RES}/dev_{RETRIEVAL_TAG}.evidence_k{PER_DOC}_n{N_SENT}.pred.jsonl"
+SCORES = {"train": f"{RES}/train_{RETRIEVAL_TAG}.oof{FOLDS}.scores.jsonl",   # 교차 예측 점수
+          "dev": f"{RES}/dev_{RETRIEVAL_TAG}.scores.jsonl"}
+PARAMS = f"{RES}/{RETRIEVAL_TAG}.oof{FOLDS}.selection_params.json"
 # 검색 설정마다 모델을 따로 둬서 설정끼리 그대로 비교할 수 있게 함
-CE_DIR = f"{DATA}/models/{RETRIEVAL_TAG}/sentence_selector"
-VER_DIR = f"{DATA}/models/{RETRIEVAL_TAG}/verifier"
+MODEL_ROOT = f"{DATA}/models/{RETRIEVAL_TAG}"
+CE_DIR = f"{MODEL_ROOT}/sentence_selector"                       # train 전체로 학습 (dev 점수용)
+CE_FOLD = [f"{MODEL_ROOT}/sentence_selector_fold{k}of{FOLDS}" for k in range(FOLDS)]
 for s, p in RETRIEVAL.items():
     assert os.path.exists(p), f"{s} 검색 결과가 없습니다: {p}"
     print(s, sum(1 for _ in open(p, encoding="utf-8")), "claims")
@@ -117,21 +125,60 @@ assert not missing, (f"{len(missing)}/{len(needed)} retrieved docs are not in th
 print(f"store ready: all {len(needed)} retrieved docs present")
 
 # %%
-# ---- 2. cross-encoder 학습 ----
-if done(f"{CE_DIR}/config.json"):
-    print("skip: cross-encoder already trained at", CE_DIR)
-else:
-    run("sentence_selector.py", "train", "--retrieval", RETRIEVAL["train"], "--out", CE_DIR)
+# ---- 2. cross-encoder 학습 (전체 1개 + fold별 FOLDS개) ----
+for out, extra in [(CE_DIR, [])] + [(CE_FOLD[k], ["--folds", str(FOLDS), "--exclude-fold", str(k)])
+                                    for k in range(FOLDS)]:
+    if done(f"{out}/config.json"):
+        print("skip: cross-encoder already trained at", out)
+    else:
+        run("sentence_selector.py", "train", "--retrieval", RETRIEVAL["train"], "--out", out, *extra)
 
 # %%
-# ---- 3. 근거 문장 선택 (train, dev) ----
+# ---- 3. 근거 문장 선택 ----
+# 3a. 후보 문장 점수: train은 fold 모델로 교차 예측, dev는 전체 모델
+if not done(SCORES["train"]):
+    parts = []
+    for k in range(FOLDS):
+        part = f"{SCORES['train']}.fold{k}"
+        run("sentence_selector.py", "score", "--retrieval", RETRIEVAL["train"], "--out", CE_FOLD[k],
+            "--folds", str(FOLDS), "--only-fold", str(k), "--batch-size", "256", "--output", part)
+        parts.append(part)
+    with open(SCORES["train"], "w", encoding="utf-8") as out:
+        for part in parts:
+            with open(part, encoding="utf-8") as f:
+                out.write(f.read())
+            os.remove(part)
+if not done(SCORES["dev"]):
+    run("sentence_selector.py", "score", "--retrieval", RETRIEVAL["dev"], "--out", CE_DIR,
+        "--batch-size", "256", "--output", SCORES["dev"])
+
+# 3b. 선택 규칙: hybrid면 train 교차 예측 점수로 기준값 선택 (dev는 쓰지 않음)
+rule_args = ["--rule", RULE, "--per-doc", str(PER_DOC), "--n", str(N_SENT)]
+if RULE == "hybrid":
+    if not done(PARAMS):
+        run("tune_selection.py", "--scores", SCORES["train"], "--split", "train", "--per-doc", str(PER_DOC),
+            "--n", str(N_SENT), "--max-cov-drop", str(MAX_COV_DROP), "--output", PARAMS)
+    params = json.load(open(PARAMS, encoding="utf-8"))
+    rule_args += ["--thr", str(params["thr"]), "--doc-thr", str(params["doc_thr"])]
+    EVID_TAG = f"evidence_hyb{params['thr']:g}_{params['doc_thr']:g}_k{PER_DOC}_n{N_SENT}_oof{FOLDS}"
+else:
+    EVID_TAG = f"evidence_k{PER_DOC}_n{N_SENT}_oof{FOLDS}"
+EVIDENCE = {s: f"{RES}/{s}_{RETRIEVAL_TAG}.{EVID_TAG}.jsonl" for s in ("train", "dev")}
+PRED = f"{RES}/dev_{RETRIEVAL_TAG}.{EVID_TAG}.pred.jsonl"
+VER_DIR = f"{MODEL_ROOT}/verifier_{EVID_TAG}"
+print("evidence:", EVID_TAG)
+
+# 3c. 규칙 적용
 for split in ("train", "dev"):
     if done(EVIDENCE[split]):
         print("skip:", EVIDENCE[split])
         continue
-    run("sentence_selector.py", "select", "--retrieval", RETRIEVAL[split], "--out", CE_DIR,
-        "--per-doc", str(PER_DOC), "--n", str(N_SENT), "--batch-size", "256", "--output", EVIDENCE[split])
+    run("sentence_selector.py", "apply", "--scores", SCORES[split], *rule_args, "--output", EVIDENCE[split])
 
+for split in ("train", "dev"):
+    with open(EVIDENCE[split], encoding="utf-8") as f:
+        sizes = [len(json.loads(l)["evidence"]) for l in f]
+    print(f"{split}: mean evidence sentences {sum(sizes) / len(sizes):.2f}")
 with open(EVIDENCE["dev"], encoding="utf-8") as f:
     ex = json.loads(f.readline())
 print(ex["claim"])
@@ -160,4 +207,4 @@ print("saved", PRED)
 
 # %%
 # ---- 6. dev 단계별 평가 (retrieval/evaluate.py) ----
-run("evaluate.py", "--split", "dev", "--tag", RETRIEVAL_TAG, "--evidence-tag", f"evidence_k{PER_DOC}_n{N_SENT}")
+run("evaluate.py", "--split", "dev", "--tag", RETRIEVAL_TAG, "--evidence-tag", EVID_TAG)

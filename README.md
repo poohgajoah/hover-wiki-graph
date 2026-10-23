@@ -123,7 +123,13 @@ flowchart LR
    제목에 연결합니다(정확 일치 → 소문자·괄호 제거 일치 → 제목 임베딩 검색). 연결된 문서에서 시작해
    첫 단락 링크 그래프를 best-first로 탐색하고, 20개 문서를 엽니다.
 2. **근거 문장 고르기**: HoVer train으로 학습한 cross-encoder(정답 근거 문장 vs. 검색된 오답 문서의 문장)로
-   후보 문서의 모든 문장에 점수를 매기고, 문서마다 상위 2문장, 전체 5문장을 남깁니다.
+   후보 문서의 모든 문장에 점수를 매깁니다. 고르는 규칙은 두 가지입니다.
+   - `fixed`: 문서마다 상위 2문장, 전체 상위 5문장 (지금까지의 결과)
+   - `hybrid`: 근거일 확률이 기준값 이상인 문장(문서당 최대 2, 전체 최대 5) + 아직 한 문장도 안 뽑힌 문서는
+     가장 높은 문장 1개를 낮은 기준값으로 구제. 기준값은 train 교차 예측 점수로 고릅니다(`retrieval/tune_selection.py`).
+
+   train 근거는 2-fold 교차 예측으로 만듭니다. 한쪽 절반으로 학습한 cross-encoder가 다른 절반의 점수를 매겨서,
+   판정 모델이 dev와 같은 조건의 근거로 학습하게 합니다.
 3. **판정**: HoVer 공식 레시피(bert-base-uncased, 최대 길이 200, claim ≤ 60토큰, 학습률 3e-5,
    배치 4 × 2, 3,000스텝)로 train에서 고른 근거 문장을 넣어 학습한 모델이 SUPPORTED / NOT_SUPPORTED를 판정합니다.
 
@@ -145,13 +151,26 @@ GPU가 필요한 단계라 Colab 노트북으로 돌립니다.
 문장 저장소를 만들고 1단계 결과를 `data/results/`에 둔 뒤 실행합니다. 데이터 폴더는 환경변수 `HOVER_DATA`로 바꿀 수 있습니다.
 ```
 cd retrieval
-uv run python sentence_selector.py train  --retrieval ../data/results/train_B20_M5_d3_both_in3d0_floor0.7.jsonl
-uv run python sentence_selector.py select --retrieval ../data/results/train_B20_M5_d3_both_in3d0_floor0.7.jsonl
-uv run python sentence_selector.py select --retrieval ../data/results/dev_B20_M5_d3_both_in3d0_floor0.7.jsonl
-uv run python verifier.py train   --evidence ../data/results/train_B20_M5_d3_both_in3d0_floor0.7.evidence_k2_n5.jsonl
-uv run python verifier.py predict --evidence ../data/results/dev_B20_M5_d3_both_in3d0_floor0.7.evidence_k2_n5.jsonl
-uv run python evaluate.py --tag B20_M5_d3_both_in3d0_floor0.7   # dev 단계별 성능
+T=B20_M5_d3_both_in3d0_floor0.7; R=../data/results
+# cross-encoder: 전체 1개(dev용) + fold 2개(train 교차 예측용)
+uv run python sentence_selector.py train --retrieval $R/train_$T.jsonl --out ../data/models/$T/sentence_selector
+uv run python sentence_selector.py train --retrieval $R/train_$T.jsonl --folds 2 --exclude-fold 0 --out ../data/models/$T/ce_f0
+uv run python sentence_selector.py train --retrieval $R/train_$T.jsonl --folds 2 --exclude-fold 1 --out ../data/models/$T/ce_f1
+# 후보 문장 점수 (train은 fold별, 합쳐서 하나로)
+uv run python sentence_selector.py score --retrieval $R/train_$T.jsonl --out ../data/models/$T/ce_f0 --folds 2 --only-fold 0 --output f0.jsonl
+uv run python sentence_selector.py score --retrieval $R/train_$T.jsonl --out ../data/models/$T/ce_f1 --folds 2 --only-fold 1 --output f1.jsonl
+cat f0.jsonl f1.jsonl > $R/train_$T.oof2.scores.jsonl
+uv run python sentence_selector.py score --retrieval $R/dev_$T.jsonl --out ../data/models/$T/sentence_selector --output $R/dev_$T.scores.jsonl
+# 기준값 고르기 (train) → 규칙 적용 (예: thr 0.5, doc-thr 0.2)
+uv run python tune_selection.py --scores $R/train_$T.oof2.scores.jsonl
+uv run python sentence_selector.py apply --scores $R/train_$T.oof2.scores.jsonl --rule hybrid --thr 0.5 --doc-thr 0.2 --output $R/train_$T.E.jsonl
+uv run python sentence_selector.py apply --scores $R/dev_$T.scores.jsonl --rule hybrid --thr 0.5 --doc-thr 0.2 --output $R/dev_$T.E.jsonl
+# 판정 모델 학습·예측·평가
+uv run python verifier.py train   --evidence $R/train_$T.E.jsonl --out ../data/models/$T/verifier_E
+uv run python verifier.py predict --evidence $R/dev_$T.E.jsonl --out ../data/models/$T/verifier_E
+uv run python evaluate.py --tag $T --evidence-tag E
 ```
+`sentence_selector.py select`는 점수 매기기와 규칙 적용을 한 번에 합니다(기본 `fixed`).
 
 ## HoVer 공식 베이스라인과의 차이
 
