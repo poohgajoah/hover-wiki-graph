@@ -164,7 +164,7 @@ uv run python evaluate.py --tag B20_M5_d3_both_in3d0_floor0.7   # dev 단계별 
 | 문서 선택 | TF-IDF 상위 20개를 BERT-base로 재순위 → 상위 5개 문서 | 시작 문서에서 첫 단락 링크 그래프를 best-first 탐색 (MiniLM 임베딩, 최대 깊이 3, 나가는 링크 상위 5개 + 들어오는 링크 상위 3개를 따로 선택) → 20개 문서 |
 | 문서 간 연결 | 쓰지 않음 (문서를 독립적으로 점수화) | 위키 하이퍼링크를 따라 숨은 중간 개체(bridge) 문서로 이동 |
 | 문장 분리 | Stanford CoreNLP로 실행 시 분리 | HotpotQA 덤프에 저장된 문장 그대로 (HoVer 문장 번호와 일치) |
-| 근거 문장 선택 | BERT-base, 상위 5개 문서의 문장 중 임계값을 넘는 문장 | cross-encoder(`ms-marco-MiniLM-L-6-v2`에서 시작해 HoVer train으로 미세조정, 검색된 오답 문서의 문장을 음성으로 사용), 문서마다 상위 2문장, 전체 5문장 고정 |
+| 근거 문장 선택 | BERT-base. 상위 5개 문서를 문서마다 한 번씩 읽고(claim + 첫 단락 전체), 문서당 최대 7문장의 확률을 내서 0.5를 넘는 문장을 모두 선택 (개수 가변) | cross-encoder(`ms-marco-MiniLM-L-6-v2`에서 시작해 HoVer train으로 미세조정, 검색된 오답 문서의 문장을 음성으로 사용), 문서마다 상위 2문장, 전체 5문장 고정 (문장을 하나씩 따로 판단) |
 | 검증 모델 | BERT-base-uncased, 길이 200, claim ≤ 60토큰, 학습률 3e-5, 배치 4 × 2, 3,000스텝 | 같은 레시피 |
 | 검증 모델 학습 입력 | BERT+Retr: 파이프라인이 고른 근거 / BERT+Gold: 정답 근거 | 파이프라인이 고른 train 근거 (BERT+Retr 방식) |
 

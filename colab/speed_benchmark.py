@@ -6,7 +6,8 @@
 # - **이 파이프라인**: 검색 노트북(`colab/hover_retrieval.py`) 코드를 저장소에서 불러와 그대로 실행하고,
 #   학습한 cross-encoder·검증 모델은 Drive `hover_bundle/models/<RETRIEVAL_TAG>/`에서 불러옵니다.
 # - **HoVer 공식 베이스라인 재현** (속도 측정용): TF-IDF(단어+두 단어 묶음, log TF × IDF, DrQA 방식) 상위 100개
-#   → BERT-base로 상위 20개 재순위 → 상위 5개 문서의 문장(문서당 최대 7개)을 BERT-base로 점수 → BERT-base 검증.
+#   → BERT-base로 상위 20개 재순위 → 상위 5개 문서를 문서마다 BERT-base에 한 번씩 넣어 문장(문서당 최대 7개)별
+#   확률을 내고 0.5를 넘는 문장을 근거로 선택 → BERT-base 검증.
 #   재순위·문장 선택 BERT는 학습된 가중치가 없지만 계산량은 같아서 시간 측정에는 영향이 없습니다.
 #   공식 코드가 실행 중 하는 Stanford CoreNLP 문장 분리는 재현하지 않아, 공식 쪽 시간은 실제보다 짧게 나옵니다.
 #
@@ -180,7 +181,10 @@ print(f"TF-IDF index: {X.shape}, nnz {X.nnz:,}, {prep_seconds['official: TF-IDF 
 
 rr_tok = AutoTokenizer.from_pretrained("bert-base-uncased")
 rr = AutoModelForSequenceClassification.from_pretrained("bert-base-uncased", num_labels=2).to(DEV).eval()  # 문서 재순위
-ss = AutoModelForSequenceClassification.from_pretrained("bert-base-uncased", num_labels=2).to(DEV).eval()  # 문장 선택
+from transformers import AutoModel
+
+ss_encoder = AutoModel.from_pretrained("bert-base-uncased").to(DEV).eval()          # 문장 선택: 문서 단위 인코더
+ss_head = torch.nn.Linear(ss_encoder.config.hidden_size, 1).to(DEV).eval()          # 문장 구간 분류기
 
 
 def tfidf_topk(claim, k=100):
@@ -207,14 +211,28 @@ def official(claim):
     top5 = [top20[i] for i in order[:5]]
     sync(); t["2 BERT rerank top-20"] = time.perf_counter() - t0
 
+    # Official sentence selection (hover_sent.py / hover_sent_metrics.py): one BERT pass per doc on
+    # [CLS] claim [SEP] whole paragraph [SEP] (max 200), sentence spans (<= 7 per doc) pooled from the
+    # token states and classified, every sentence with p > 0.5 kept. Here: the same 5 doc passes, span
+    # mean-pooling and a linear head; the head is untrained, so the kept set is arbitrary but the cost is not.
     t0 = time.perf_counter()
-    sents = [s for d in top5 for s in SENT_LISTS[d][:7] if s.strip()]
+    enc = rr_tok([claim] * len(top5), [texts[d] for d in top5], truncation="only_second", max_length=200,
+                 padding=True, return_tensors="pt", return_offsets_mapping=True)
+    offsets = enc.pop("offset_mapping")
+    seq_ids = [enc.sequence_ids(b) for b in range(len(top5))]
+    hidden = ss_encoder(**{k: v.to(DEV) for k, v in enc.items()}).last_hidden_state
     evidence = []
-    if sents:
-        enc = rr_tok([claim] * len(sents), sents, truncation="only_second", max_length=200,
-                     padding=True, return_tensors="pt").to(DEV)
-        p = ss(**enc).logits.softmax(-1)[:, 1]
-        evidence = [sents[i] for i in p.argsort(descending=True)[:5].tolist()]
+    for b, d in enumerate(top5):
+        start = 0
+        for s in SENT_LISTS[d][:7]:
+            end = start + len(s)
+            tok = [i for i, (sid, (a, z)) in enumerate(zip(seq_ids[b], offsets[b].tolist()))
+                   if sid == 1 and a < end and z > start]
+            start = end
+            if tok:
+                p = torch.sigmoid(ss_head(hidden[b, tok].mean(0))).item()
+                if p > 0.5:
+                    evidence.append(s)
     sync(); t["3 BERT sentence selection"] = time.perf_counter() - t0
 
     t0 = time.perf_counter()
