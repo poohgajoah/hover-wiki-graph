@@ -4,7 +4,8 @@
 # `hover_retrieval.ipynb`가 만든 후보 문서(`hover_bundle/results/{train,dev}_….jsonl`)를 입력으로
 # 저장소의 `retrieval/` 스크립트를 GPU에서 실행합니다.
 #
-# 1. 첫 단락 문장 저장소 만들기 (HotpotQA 2017 덤프를 Colab 디스크로 받음, Drive 용량 안 씀)
+# 1. 첫 단락 문장 저장소 준비 — Drive의 `hover_bundle/store_subset.db`를 쓰고,
+#    없으면 HotpotQA 2017 덤프를 받아 Colab 디스크에 전체 저장소를 만듦
 # 2. cross-encoder 학습 — 양성: 정답 근거 문장, 음성: 정답 문서의 다른 문장 + 검색된 오답 문서의 문장
 # 3. train·dev 근거 문장 선택 — 문서마다 상위 `PER_DOC`문장, 전체 `N`문장
 # 4. 검증 모델 학습 — HoVer 공식 레시피 (bert-base-uncased, 길이 200, claim ≤ 60토큰, lr 3e-5, 배치 4×2, 3,000스텝)
@@ -69,7 +70,15 @@ def done(path):
 
 # %%
 # ---- 1. 첫 단락 문장 저장소 ----
+# 로컬에서 만든 store_subset.db(검색 결과·정답 문서만, 약 50MB)가 Drive에 있으면 그대로 쓰고,
+# 없으면 HotpotQA 2017 덤프를 Stanford 서버에서 받아 전체 저장소를 만듭니다.
+import shutil
+
 ABS_URL = "https://nlp.stanford.edu/projects/hotpotqa/enwiki-20171001-pages-meta-current-withlinks-abstracts.tar.bz2"
+SUBSET = f"{BUNDLE}/store_subset.db"
+if not os.path.exists(f"{DATA}/store/wiki.db") and os.path.exists(SUBSET):
+    shutil.copyfile(SUBSET, f"{DATA}/store/wiki.db")
+    print("using", SUBSET)
 if not os.path.exists(f"{DATA}/store/wiki.db"):
     if not os.path.exists(f"{WORK}/abstracts"):
         subprocess.run(["aria2c", "-q", "-x", "16", "-s", "16", "-d", WORK, "-o", "abstracts.tar.bz2", ABS_URL], check=True)
