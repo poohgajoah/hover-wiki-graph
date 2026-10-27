@@ -5,6 +5,7 @@
 #
 # - **이 파이프라인**: 검색 노트북(`colab/hover_retrieval.py`) 코드를 저장소에서 불러와 그대로 실행하고,
 #   학습한 cross-encoder·검증 모델은 Drive `hover_bundle/models/<RETRIEVAL_TAG>/`에서 불러옵니다.
+#   근거 선택은 근거·검증 노트북이 고른 hybrid 기준값(`results/<RETRIEVAL_TAG>.oof2.selection_params.json`)을 씁니다.
 # - **HoVer 공식 베이스라인 재현** (속도 측정용): TF-IDF(단어+두 단어 묶음, log TF × IDF, DrQA 방식) 상위 100개
 #   → BERT-base로 상위 20개 재순위 → 상위 5개 문서를 문서마다 BERT-base에 한 번씩 넣어 문장(문서당 최대 7개)별
 #   확률을 내고 0.5를 넘는 문장을 근거로 선택 → BERT-base 검증.
@@ -76,7 +77,18 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 sys.path.insert(0, f"{REPO_DIR}/retrieval")
 from common import sentence_input            # noqa: E402
+from sentence_selector import choose         # noqa: E402
 from verifier import encode as ver_encode    # noqa: E402
+
+# 근거 선택 규칙: 근거·검증 노트북이 train으로 고른 hybrid 기준값이 있으면 그대로, 없으면 fixed
+PARAMS = f"{BUNDLE}/results/{RETRIEVAL_TAG}.oof2.selection_params.json"
+if os.path.exists(PARAMS):
+    _p = json.load(open(PARAMS))
+    RULE, THR, DOC_THR = "hybrid", _p["thr"], _p["doc_thr"]
+    VER_SUBDIR = f"verifier_evidence_hyb{THR:g}_{DOC_THR:g}_k2_n5_oof2"
+else:
+    RULE, THR, DOC_THR, VER_SUBDIR = "fixed", 0.5, 0.2, "verifier"
+print(f"evidence rule: {RULE} (thr {THR}, doc_thr {DOC_THR}), verifier: {VER_SUBDIR}")
 
 SENT_LISTS = [None] * N
 with gzip.open(SENTS, "rt", encoding="utf-8", newline="\n") as f:
@@ -87,8 +99,8 @@ with gzip.open(SENTS, "rt", encoding="utf-8", newline="\n") as f:
 MODEL_DIR = f"{BUNDLE}/models/{RETRIEVAL_TAG}"
 ce_tok = AutoTokenizer.from_pretrained(f"{MODEL_DIR}/sentence_selector")
 ce = AutoModelForSequenceClassification.from_pretrained(f"{MODEL_DIR}/sentence_selector").to(DEV).eval()
-ver_tok = AutoTokenizer.from_pretrained(f"{MODEL_DIR}/verifier")
-ver = AutoModelForSequenceClassification.from_pretrained(f"{MODEL_DIR}/verifier").to(DEV).eval()
+ver_tok = AutoTokenizer.from_pretrained(f"{MODEL_DIR}/{VER_SUBDIR}")
+ver = AutoModelForSequenceClassification.from_pretrained(f"{MODEL_DIR}/{VER_SUBDIR}").to(DEV).eval()
 bench_claims = [c["claim"] for c in claims[:N_BENCH]]
 
 
@@ -142,11 +154,8 @@ def ours(claim):
         enc = ce_tok([claim] * len(cands), [sentence_input(titles[d], s) for d, _, s in cands],
                      truncation=True, max_length=128, padding=True, return_tensors="pt").to(DEV)
         sc = ce(**enc).logits.squeeze(-1).float().tolist()
-        per_doc = {}
-        for (d, i, s), v in zip(cands, sc):
-            per_doc.setdefault(d, []).append((v, s))
-        kept = sorted((x for v in per_doc.values() for x in sorted(v, reverse=True)[:2]), reverse=True)[:5]
-        evidence = [s for _, s in kept]
+        kept = choose([[d, i, v] for (d, i, _), v in zip(cands, sc)], RULE, 2, 5, THR, DOC_THR)
+        evidence = [SENT_LISTS[d][i] for d, i, _ in kept]
     sync(); t["4 evidence sentences"] = time.perf_counter() - t0
 
     t0 = time.perf_counter()
