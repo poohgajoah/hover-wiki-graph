@@ -104,6 +104,8 @@ GPU가 필요한 단계라 Colab 노트북으로 돌립니다.
 필요한 파일은 Google Drive `MyDrive/hover_bundle/`에 둡니다. `scripts/make_colab_bundle.py`가 만드는
 노드·링크·HoVer json과, `retrieval/export_sentences.py`가 만드는 첫 단락 문장 `sents.jsonl.gz`입니다.
 결과는 `hover_bundle/results/`, 학습한 모델은 `hover_bundle/models/<검색 설정>/`에 저장됩니다.
+첫 실행 때 첫 단락 텍스트·제목/첫 문단 임베딩·문장 저장소를 `hover_bundle/cache/`(약 12GB)에 저장하고,
+다음 실행부터는 다시 계산하지 않고 불러옵니다.
 
 2·3단계는 `retrieval/` 스크립트이므로 노트북 없이 직접 실행할 수도 있습니다. `retrieval/build_store.py`로
 문장 저장소를 만들고 1단계 결과를 `data/results/`에 둔 뒤 실행합니다. 데이터 폴더는 환경변수 `HOVER_DATA`로 바꿀 수 있습니다.

@@ -12,6 +12,8 @@
 #   공식 코드가 실행 중 하는 Stanford CoreNLP 문장 분리는 재현하지 않아, 공식 쪽 시간은 실제보다 짧게 나옵니다.
 #
 # 한 번만 드는 준비 비용(이 파이프라인: 제목·첫 문단 임베딩, 공식: TF-IDF 인덱스)도 따로 잽니다.
+# 임베딩은 검색 노트북과 같은 Drive 캐시(`hover_bundle/cache/`)를 쓰고, 캐시에서 불러온 경우
+# 준비 비용은 처음 계산할 때 기록한 시간을 씁니다.
 # 필요: Drive `hover_bundle/`의 번들 파일과 `sents.jsonl.gz`, 근거·검증 노트북이 학습한 모델. 런타임 → GPU(L4).
 
 # %%
@@ -31,6 +33,7 @@ drive.mount("/content/drive")
 
 # %%
 # ---- 검색 노트북 코드 실행 (데이터·그래프·임베딩·NER·탐색 함수 준비) ----
+import json
 import re
 import time
 
@@ -50,9 +53,15 @@ for cell in cells:
     if res.error_before_exec or res.error_in_exec:
         raise RuntimeError(f"retrieval cell failed: {body.splitlines()[0]}")
     if body.startswith("# ---- configuration"):
-        SPLIT, LIMIT, CACHE = "dev", N_BENCH, None  # 벤치마크용 덮어쓰기
+        SPLIT, LIMIT = "dev", N_BENCH                # 벤치마크용 덮어쓰기 (임베딩은 Drive 캐시 사용)
     if body.startswith("# ---- embeddings"):
         prep_seconds["ours: title + intro embeddings"] = time.perf_counter() - t0
+# 캐시에서 불러왔다면, 준비 비용은 처음 계산할 때 기록해 둔 시간을 씀
+import glob as _glob
+recorded = [json.load(open(p)) for p in _glob.glob(f"{CACHE}/*{MODEL_SLUG}.f16.seconds.json")] if CACHE else []
+if len(recorded) == 2:
+    prep_seconds["ours: title + intro embeddings"] = sum(r["seconds"] for r in recorded)
+    prep_seconds["ours: recorded on"] = recorded[0]["gpu"]
 print("retrieval code ready:", len(claims), "claims")
 
 # %%
@@ -258,7 +267,7 @@ def summarize(rows):
 
 summary = {"gpu": torch.cuda.get_device_name(0) if DEV == "cuda" else "cpu", "claims_timed": len(ours_rows),
            "ours": summarize(ours_rows), "official": summarize(official_rows),
-           "prep_seconds": {k: round(v, 1) for k, v in prep_seconds.items()}}
+           "prep_seconds": {k: round(v, 1) if isinstance(v, float) else v for k, v in prep_seconds.items()}}
 for name in ("ours", "official"):
     print(f"\n## {name} (ms per claim, {summary['claims_timed']} claims, {summary['gpu']})")
     print("| stage | mean | p50 |")

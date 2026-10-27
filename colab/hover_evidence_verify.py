@@ -95,9 +95,16 @@ import shutil
 ABS_URL = "https://nlp.stanford.edu/projects/hotpotqa/enwiki-20171001-pages-meta-current-withlinks-abstracts.tar.bz2"
 SENTS = f"{BUNDLE}/sents.jsonl.gz"
 SUBSET = f"{BUNDLE}/store_subset.db"
+STORE_CACHE = f"{BUNDLE}/cache/wiki.db"     # 한 번 만든 전체 저장소(약 2.4GB)를 Drive에 보관
+if not os.path.exists(f"{DATA}/store/wiki.db") and os.path.exists(STORE_CACHE):
+    shutil.copyfile(STORE_CACHE, f"{DATA}/store/wiki.db")   # Colab 디스크로 복사해서 읽음 (Drive보다 빠름)
+    print("using", STORE_CACHE)
 if not os.path.exists(f"{DATA}/store/wiki.db") and os.path.exists(SENTS):
     run("build_store.py", "--nodes", f"{BUNDLE}/nodes.tsv.gz", "--links", f"{BUNDLE}/links.i32",
         "--sents", SENTS, "--out", f"{DATA}/store/wiki.db")
+    os.makedirs(os.path.dirname(STORE_CACHE), exist_ok=True)
+    shutil.copyfile(f"{DATA}/store/wiki.db", STORE_CACHE)
+    print("cached", STORE_CACHE)
 if not os.path.exists(f"{DATA}/store/wiki.db") and os.path.exists(SUBSET):
     shutil.copyfile(SUBSET, f"{DATA}/store/wiki.db")
     print("using", SUBSET)

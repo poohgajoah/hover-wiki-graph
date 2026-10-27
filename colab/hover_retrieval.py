@@ -16,12 +16,12 @@
 # Intro paragraphs come from `hover_bundle/sents.jsonl.gz` when present (made locally by
 # `retrieval/export_sentences.py`), otherwise from the Stanford-hosted HotpotQA 2017 dump (1.55 GB).
 # The run embeds 5.2M titles and intro paragraphs;
-# with `CACHE` set these are stored on Drive (≈ 10 GB) and reused next time.
+# with `CACHE` set (default) these are stored on Drive (≈ 10 GB) on the first run and loaded afterwards.
 
 # %%
 # ---- configuration ----
 BUNDLE = "/content/drive/MyDrive/hover_bundle"
-CACHE = None                # f"{BUNDLE}/cache" caches on Drive (texts ≈ 2 GB, embeddings 2 × 4 GB)
+CACHE = f"{BUNDLE}/cache"   # Drive cache: intro texts ≈ 2 GB + embeddings 2 × 4 GB, reused next time (None = off)
 SPLIT = "dev"
 LIMIT = None                # e.g. 300 for a quick run
 B = 20                      # documents opened per claim
@@ -167,17 +167,25 @@ def encode(strings, bs=256):
     return v.to(DEV, DTYPE)
 
 
+MODEL_SLUG = EMB_MODEL.split("/")[-1]
+
+
 def embed_all(name, strings, bs):
-    path = f"{CACHE}/{name}.f16.npy" if CACHE else None
+    """Embeddings of all strings; cached on Drive per model, with the compute time in a .seconds.json."""
+    path = f"{CACHE}/{name}.{MODEL_SLUG}.f16.npy" if CACHE else None
     if path and os.path.exists(path):
         arr = np.load(path)
+        print(f"{name}: loaded from {path}")
     else:
+        t0 = time.time()
         arr = np.empty((len(strings), DIM), np.float16)
         step = 262_144
         for s in tqdm(range(0, len(strings), step), desc=name):
             arr[s:s + step] = encode(strings[s:s + step], bs).float().cpu().numpy().astype(np.float16)
         if path:
             np.save(path, arr)
+            with open(path.replace(".npy", ".seconds.json"), "w") as f:
+                json.dump({"seconds": time.time() - t0, "gpu": torch.cuda.get_device_name(0) if DEV == "cuda" else "cpu"}, f)
     return torch.from_numpy(arr).to(DEV, DTYPE)
 
 
